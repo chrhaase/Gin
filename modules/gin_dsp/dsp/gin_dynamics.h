@@ -24,7 +24,7 @@ public:
         rms
     };
 
-    void setSampleRate (double f) { sampleRate = f; }
+    void setSampleRate (double f)       { sampleRate = f;       }
 
     void setParams (float attackS, float holdS, float releaseS, bool analogTC, Mode detect, bool logDetector);
 
@@ -65,27 +65,27 @@ public:
 
     void setSampleRate (double sampleRate);
     void setNumChannels (int ch);
-    void setMode (Type t) { type = t; }
-    void setLinked (bool l) { channelsLinked = l; }
+    void setMode (Type t)                   { type = t;             }
+    void setLinked (bool l)                 { channelsLinked = l;   }
 
-    void setParams (float attackS, float holdS, float releaseS, float thresh, float ratio,
-                    float kneeWidth, EnvelopeDetector::Mode detectionMode = EnvelopeDetector::rms);
+    void setParams (float attackS, float holdS, float releaseS, float thresh, float ratio, float kneeWidth,
+                    EnvelopeDetector::Mode detectionMode = EnvelopeDetector::rms);
 
-    void setInputGain (float g) { inputGain = g; }
-    void setOutputGain (float g) { outputGain = g; }
+    void setInputGain (float g)             { inputGain = g;    }
+    void setOutputGain (float g)            { outputGain = g;   }
 
     void reset();
     void process (juce::AudioSampleBuffer& buffer, juce::AudioSampleBuffer* envelopeOut = nullptr);
 
-    const LevelTracker& getInputTracker() { return inputTracker; }
-    const LevelTracker& getOutputTracker() { return outputTracker; }
-    const LevelTracker& getReductionTracker() { return reductionTracker; }
+    const LevelTracker& getInputTracker()       { return inputTracker;      }
+    const LevelTracker& getOutputTracker()      { return outputTracker;     }
+    const LevelTracker& getReductionTracker()   { return reductionTracker;  }
 
     float calcCurve (float detectorValue);
 
 private:
     juce::OwnedArray<EnvelopeDetector> envelopes;
-    LevelTracker inputTracker, outputTracker, reductionTracker { -30.0f };
+    LevelTracker inputTracker, outputTracker, reductionTracker {-30.0f};
 
     double sampleRate = 44100.0;
     Type type = compressor;
