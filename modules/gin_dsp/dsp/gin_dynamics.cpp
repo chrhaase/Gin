@@ -108,10 +108,10 @@ void Dynamics::setNumChannels (int ch)
         envelopes.removeLast();
 }
 
-void Dynamics::setParams (float attackS, float holdS, float releaseS, float threshold_, float ratio_, float kneeWidth_)
+void Dynamics::setParams (float attackS, float holdS, float releaseS, float threshold_, float ratio_, float kneeWidth_,  EnvelopeDetector::Mode detectionMode)
 {
     for (auto e : envelopes)
-        e->setParams (attackS, holdS, releaseS, false, EnvelopeDetector::peak, true);
+        e->setParams (attackS, holdS, releaseS, false, detectionMode, true);
 
     threshold = threshold_;
     ratio = ratio_;
