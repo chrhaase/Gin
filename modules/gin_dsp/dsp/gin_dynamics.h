@@ -24,7 +24,7 @@ public:
         rms
     };
 
-    void setSampleRate (double f)       { sampleRate = f;       }
+    void setSampleRate (double f)           { sampleRate = f;       }
 
     void setParams (float attackS, float holdS, float releaseS, bool analogTC, Mode detect, bool logDetector);
 
