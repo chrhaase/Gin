@@ -35,10 +35,12 @@
 extern "C"
 {
 #include "3rdparty/src/samplerate.h"
-#include "3rdparty/src/src_linear.c"
-#include "3rdparty/src/src_sinc.c"
-#include "3rdparty/src/src_zoh.c"
-#include "3rdparty/src/samplerate.c"
+#if GIN_BUILD_LIB_SAMPLERATE
+ #include "3rdparty/src/src_linear.c"
+ #include "3rdparty/src/src_sinc.c"
+ #include "3rdparty/src/src_zoh.c"
+ #include "3rdparty/src/samplerate.c"
+#endif
 }
 
 #if __clang__
