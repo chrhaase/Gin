@@ -4,12 +4,10 @@ const float DIGITAL_TC = -2.0f; // log(1%)
 const float ANALOG_TC = -0.43533393574791066201247090699309f; // (log(36.7%)
 
 //================================================================================
-void EnvelopeDetector::reset()
-{
-    envelope = 0.0;
-}
+void EnvelopeDetector::reset() { envelope = 0.0; }
 
-void EnvelopeDetector::setParams (float attackS_, float holdS_, float releaseS_, bool analogTC_, Mode detect_, bool logDetector_)
+void EnvelopeDetector::setParams (float attackS_, float holdS_, float releaseS_, bool analogTC_,
+                                  Mode detect_, bool logDetector_)
 {
     analogTC = analogTC_;
     mode = detect_;
@@ -20,10 +18,7 @@ void EnvelopeDetector::setParams (float attackS_, float holdS_, float releaseS_,
     setReleaseTime (releaseS_);
 }
 
-void EnvelopeDetector::setHoldTime (float holdS)
-{
-    holdTime = holdS;
-}
+void EnvelopeDetector::setHoldTime (float holdS) { holdTime = holdS; }
 
 void EnvelopeDetector::setAttackTime (float attackS)
 {
@@ -45,15 +40,9 @@ float EnvelopeDetector::process (float input)
 {
     switch (mode)
     {
-        case peak:
-            input = std::fabs (input);
-            break;
-        case ms:
-            input = std::fabs (input) * std::fabs (input);
-            break;
-        case rms:
-            input = std::pow (std::fabs (input) * std::fabs (input), 0.5f);
-            break;
+        case peak: input = std::fabs (input); break;
+        case ms: input = std::fabs (input) * std::fabs (input); break;
+        case rms: input = std::pow (std::fabs (input) * std::fabs (input), 0.5f); break;
     }
 
     if (input > envelope)
@@ -87,31 +76,23 @@ float EnvelopeDetector::process (float input)
 void Dynamics::setSampleRate (double sampleRate_)
 {
     sampleRate = sampleRate_;
-
-    for (auto e : envelopes)
-        e->setSampleRate (sampleRate);
-
     reset();
 }
 
 void Dynamics::setNumChannels (int ch)
 {
-    channels = ch;
-
-    while (envelopes.size() < channels)
+    if (channels != ch)
     {
-        auto e = new EnvelopeDetector();
-        e->setSampleRate (sampleRate);
-        envelopes.add (e);
+        channels = ch;
+        reset();
     }
-    while (envelopes.size() > channels)
-        envelopes.removeLast();
 }
 
-void Dynamics::setParams (float attackS, float holdS, float releaseS, float threshold_, float ratio_, float kneeWidth_,  EnvelopeDetector::Mode detectionMode)
+void Dynamics::setParams (float attackS, float holdS, float releaseS, float threshold_,
+                          float ratio_, float kneeWidth_)
 {
-    for (auto e : envelopes)
-        e->setParams (attackS, holdS, releaseS, false, detectionMode, true);
+    envelope.setAttackTime (attackS * 1000.0f);
+    envelope.setReleaseTime (releaseS * 1000.0f);
 
     threshold = threshold_;
     ratio = ratio_;
@@ -120,8 +101,12 @@ void Dynamics::setParams (float attackS, float holdS, float releaseS, float thre
 
 void Dynamics::reset()
 {
-    for (auto e : envelopes)
-        e->reset();
+    juce::dsp::ProcessSpec spec;
+    spec.sampleRate = sampleRate;
+    spec.numChannels = channels;
+    spec.maximumBlockSize = 2048; // not expected to be used
+    envelope.prepare (spec);
+    envelope.setLevelCalculationType (juce::dsp::BallisticsFilterLevelCalculationType::RMS);
 }
 
 void Dynamics::process (juce::AudioSampleBuffer& buffer, juce::AudioSampleBuffer* envelopeOut)
@@ -130,27 +115,23 @@ void Dynamics::process (juce::AudioSampleBuffer& buffer, juce::AudioSampleBuffer
 
     int numSamples = buffer.getNumSamples();
 
-    auto input  = buffer.getArrayOfReadPointers();
+    auto input = buffer.getArrayOfReadPointers();
     auto output = buffer.getArrayOfWritePointers();
-    auto env    = envelopeOut != nullptr ? envelopeOut->getArrayOfWritePointers() : nullptr;
-
-    float peakReduction = 1.0f;
+    auto env = envelopeOut != nullptr ? envelopeOut->getArrayOfWritePointers() : nullptr;
 
     for (int i = 0; i < numSamples; i++)
     {
+        float peakReduction = 1.0f;
         if (channelsLinked)
         {
             float linked = 0.0f;
             for (int c = 0; c < channels; c++)
             {
                 float in = inputGain * input[c][i];
-
-                in = envelopes[c]->process (in);
-
-                linked += juce::Decibels::decibelsToGain (in);
+                linked += envelope.processSample (c, in);
             }
 
-            linked /= float ( channels );
+            linked /= float (channels);
 
             if (env != nullptr)
                 env[0][i] = linked;
@@ -168,8 +149,7 @@ void Dynamics::process (juce::AudioSampleBuffer& buffer, juce::AudioSampleBuffer
             for (int c = 0; c < channels; c++)
             {
                 float in = inputGain * input[c][i];
-
-                in = envelopes[c]->process (in);
+                in = envelope.processSample (c, in);
 
                 if (env != nullptr)
                     env[c][i] = juce::Decibels::decibelsToGain (in);
@@ -180,9 +160,10 @@ void Dynamics::process (juce::AudioSampleBuffer& buffer, juce::AudioSampleBuffer
                 output[c][i] = inputGain * gain * input[c][i] * outputGain;
             }
         }
+        envelope.snapToZero();
+        reductionTracker.trackSample (peakReduction);
     }
 
-    reductionTracker.trackSample (peakReduction);
     outputTracker.trackBuffer (buffer);
 }
 
@@ -192,8 +173,11 @@ float Dynamics::calcCurve (float dbIn)
     {
         float dbOut = dbIn;
 
-        if (kneeWidth > 0 && dbIn >= (threshold - kneeWidth / 2.0f) && dbIn <= threshold + kneeWidth / 2.0f)
-            dbOut = dbIn + ((1.0f / ratio - 1.0f) * std::pow (dbIn - threshold + kneeWidth / 2.0f, 2.0f) / (2.0f * kneeWidth));
+        if (kneeWidth > 0 && dbIn >= (threshold - kneeWidth / 2.0f)
+            && dbIn <= threshold + kneeWidth / 2.0f)
+            dbOut = dbIn
+                    + ((1.0f / ratio - 1.0f) * std::pow (dbIn - threshold + kneeWidth / 2.0f, 2.0f)
+                       / (2.0f * kneeWidth));
         else if (dbIn > threshold + kneeWidth / 2.0)
             dbOut = threshold + (dbIn - threshold) / ratio;
 
@@ -203,8 +187,11 @@ float Dynamics::calcCurve (float dbIn)
     {
         float dbOut = dbIn;
 
-        if (kneeWidth > 0 && dbIn >= (threshold - kneeWidth / 2.0f) && dbIn <= threshold + kneeWidth / 2.0f)
-            dbOut = dbIn + (1.0f * std::pow (dbIn - threshold + kneeWidth / 2.0f, 2.0f) / (2.0f * kneeWidth));
+        if (kneeWidth > 0 && dbIn >= (threshold - kneeWidth / 2.0f)
+            && dbIn <= threshold + kneeWidth / 2.0f)
+            dbOut = dbIn
+                    + (1.0f * std::pow (dbIn - threshold + kneeWidth / 2.0f, 2.0f)
+                       / (2.0f * kneeWidth));
         else if (dbIn > threshold + kneeWidth / 2.0f)
             dbOut = threshold;
 
@@ -215,8 +202,11 @@ float Dynamics::calcCurve (float dbIn)
         float dbOut = dbIn;
 
         // soft-knee with detection value in range?
-        if (kneeWidth > 0 && dbIn >= (threshold - kneeWidth / 2.0f) && dbIn <= threshold + kneeWidth / 2.0f)
-            dbOut = dbIn - ((ratio - 1.0f) * std::pow ((dbIn - threshold - (kneeWidth / 2.0f)), 2.0f)) / (2.0f * kneeWidth);
+        if (kneeWidth > 0 && dbIn >= (threshold - kneeWidth / 2.0f)
+            && dbIn <= threshold + kneeWidth / 2.0f)
+            dbOut = dbIn
+                    - ((ratio - 1.0f) * std::pow ((dbIn - threshold - (kneeWidth / 2.0f)), 2.0f))
+                          / (2.0f * kneeWidth);
         else if (dbIn < threshold + kneeWidth / 2.0)
             dbOut = threshold + (dbIn - threshold) * ratio;
 
@@ -226,8 +216,11 @@ float Dynamics::calcCurve (float dbIn)
     {
         float dbOut = dbIn;
 
-        if (kneeWidth > 0 && dbIn >= (threshold - kneeWidth / 2.0f) && dbIn <= threshold + kneeWidth / 2.0f)
-            dbOut = dbIn - ((100.0f - 1.0f) * std::pow ((dbIn - threshold - (kneeWidth / 2.0f)), 2.0f)) / (2.0f * kneeWidth);
+        if (kneeWidth > 0 && dbIn >= (threshold - kneeWidth / 2.0f)
+            && dbIn <= threshold + kneeWidth / 2.0f)
+            dbOut = dbIn
+                    - ((100.0f - 1.0f) * std::pow ((dbIn - threshold - (kneeWidth / 2.0f)), 2.0f))
+                          / (2.0f * kneeWidth);
         else if (dbIn < threshold - kneeWidth / 2.0f)
             dbOut = -1000.0f;
 
