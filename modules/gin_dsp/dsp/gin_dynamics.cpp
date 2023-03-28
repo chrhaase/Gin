@@ -111,6 +111,7 @@ void Dynamics::reset()
 
 void Dynamics::process (juce::AudioSampleBuffer& buffer, juce::AudioSampleBuffer* envelopeOut)
 {
+    buffer.applyGain (inputGain);
     inputTracker.trackBuffer (buffer);
 
     int numSamples = buffer.getNumSamples();
@@ -127,7 +128,7 @@ void Dynamics::process (juce::AudioSampleBuffer& buffer, juce::AudioSampleBuffer
             float linked = 0.0f;
             for (int c = 0; c < channels; c++)
             {
-                float in = inputGain * input[c][i];
+                float in = input[c][i];
                 linked += envelope.processSample (c, in);
             }
 
@@ -142,7 +143,7 @@ void Dynamics::process (juce::AudioSampleBuffer& buffer, juce::AudioSampleBuffer
             peakReduction = std::min (peakReduction, gain);
 
             for (int c = 0; c < channels; c++)
-                output[c][i] = inputGain * gain * input[c][i] * outputGain;
+                output[c][i] = gain * input[c][i] * outputGain;
         }
         else
         {
