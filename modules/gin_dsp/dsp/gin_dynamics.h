@@ -68,8 +68,7 @@ public:
     void setMode (Type t)                   { type = t;             }
     void setLinked (bool l)                 { channelsLinked = l;   }
 
-    void setParams (float attackS, float holdS, float releaseS, float thresh, float ratio, float kneeWidth,
-                    EnvelopeDetector::Mode detectionMode = EnvelopeDetector::rms);
+    void setParams (float attackS, float holdS, float releaseS, float thresh, float ratio, float kneeWidth);
 
     void setInputGain (float g)             { inputGain = g;    }
     void setOutputGain (float g)            { outputGain = g;   }
@@ -84,7 +83,7 @@ public:
     float calcCurve (float detectorValue);
 
 private:
-    juce::OwnedArray<EnvelopeDetector> envelopes;
+    juce::dsp::BallisticsFilter<float> envelope;
     LevelTracker inputTracker, outputTracker, reductionTracker {-30.0f};
 
     double sampleRate = 44100.0;
