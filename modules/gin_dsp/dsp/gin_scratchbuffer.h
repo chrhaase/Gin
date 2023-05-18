@@ -20,7 +20,9 @@ class ScratchBuffer : public juce::AudioSampleBuffer
 public:
     ScratchBuffer (int numChannels, int numSamples);
     ScratchBuffer (juce::AudioSampleBuffer& buffer);
-    
+
+    ScratchBuffer (const ScratchBuffer&) = default;
+
     ~ScratchBuffer();
     
 private:
