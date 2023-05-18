@@ -91,6 +91,7 @@ void Dynamics::setNumChannels (int ch)
 void Dynamics::setParams (float attackS, float holdS, float releaseS, float threshold_,
                           float ratio_, float kneeWidth_)
 {
+    juce::ignoreUnused (holdS);
     envelope.setAttackTime (attackS * 1000.0f);
     envelope.setReleaseTime (releaseS * 1000.0f);
 
@@ -103,7 +104,7 @@ void Dynamics::reset()
 {
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
-    spec.numChannels = channels;
+    spec.numChannels = static_cast<juce::uint32> (channels);
     spec.maximumBlockSize = 2048; // not expected to be used
     envelope.prepare (spec);
     envelope.setLevelCalculationType (juce::dsp::BallisticsFilterLevelCalculationType::RMS);
