@@ -3,7 +3,7 @@ Parameter::Parameter (Processor& p, juce::String uid_, juce::String name_, juce:
                       juce::String label_, float minValue, float maxValue,
                       float intervalValue, float defaultValue_, float skewFactor,
                       std::function<juce::String (const Parameter&, float)> textFunction_)
-  : juce::AudioPluginInstance::HostedParameter (1),
+  : juce::AudioPluginInstance::HostedParameter (p.versionHint),
     processor (p),
     value (defaultValue_),
     defaultValue (defaultValue_),
@@ -22,7 +22,7 @@ Parameter::Parameter (Processor& p, juce::String uid_, juce::String name_, juce:
 Parameter::Parameter (Processor& p, juce::String uid_, juce::String name_, juce::String shortName_,
                       juce::String label_, juce::NormalisableRange<float> range_, float defaultValue_,
                       std::function<juce::String (const Parameter&, float)> textFunction_)
-  : juce::AudioPluginInstance::HostedParameter (1),
+  : juce::AudioPluginInstance::HostedParameter (p.versionHint),
     processor (p),
     range (range_),
     value (defaultValue_),
@@ -37,56 +37,10 @@ Parameter::Parameter (Processor& p, juce::String uid_, juce::String name_, juce:
         shortName = name;
 }
 
-bool Parameter::isOn()
-{
-    return range.start != getUserValue();
-}
-
-bool Parameter::isOnOff()
-{
-    return range.start == 0 && range.end == range.interval;
-}
-
-float Parameter::getProcValue()
-{
-    if (conversionFunction != nullptr)
-        return conversionFunction (getUserValue());
-
-    return getUserValue();
-}
-
-float Parameter::getProcValue (int)
-{
-    if (conversionFunction != nullptr)
-        return conversionFunction (getUserValue());
-
-    return getUserValue();
-}
-
-float Parameter::getUserValue() const
-{
-    return juce::jlimit (range.start, range.end, value);
-}
-
-int Parameter::getUserValueInt() const
-{
-    return int (juce::jlimit (range.start, range.end, value));
-}
-
-bool Parameter::getUserValueBool() const
-{
-    return juce::jlimit (range.start, range.end, value) != 0.0f;
-}
-
-float Parameter::getUserDefaultValue() const
-{
-    return defaultValue;
-}
-
 void Parameter::setUserValue (float v)
 {
     v = juce::jlimit(range.start, range.end, range.snapToLegalValue (v));
-    if (! almostEqual (value, v))
+    if (! juce::approximatelyEqual (value, v))
     {
         value = v;
         triggerAsyncUpdate();
@@ -97,7 +51,7 @@ void Parameter::setUserValue (float v)
 void Parameter::setUserValueNotifingHost (float v)
 {
     v = juce::jlimit (range.start, range.end, range.snapToLegalValue (v));
-    if (! almostEqual (value, v))
+    if (! juce::approximatelyEqual (value, v))
     {
         value = v;
         if (! internal)
@@ -118,16 +72,6 @@ void Parameter::setUserValueAsUserAction (float f)
         setUserValueNotifingHost (f);
 
     endUserAction();
-}
-
-juce::String Parameter::getUserValueText() const
-{
-    return getText (getValue(), 1000) + label;
-}
-
-juce::String Parameter::userValueToText (float val)
-{
-    return getText (range.convertTo0to1 (val), 1000) + label;
 }
 
 void Parameter::beginUserAction()
@@ -197,17 +141,12 @@ void Parameter::setState (const ParamState& state)
     setUserValue (state.value);
 }
 
-float Parameter::getValue() const
-{
-    return juce::jlimit (0.0f, 1.0f, range.convertTo0to1 (value));
-}
-
 void Parameter::setValue (float valueIn)
 {
     valueIn = juce::jlimit (0.0f, 1.0f, valueIn);
     float newValue = range.snapToLegalValue (range.convertFrom0to1 (valueIn));
 
-    if (! almostEqual (value, newValue))
+    if (! juce::approximatelyEqual (value, newValue))
     {
         value = newValue;
 
@@ -216,29 +155,14 @@ void Parameter::setValue (float valueIn)
     }
 }
 
-float Parameter::getDefaultValue() const
-{
-    return range.convertTo0to1 (defaultValue);
-}
-
 juce::String Parameter::getName (int maximumStringLength) const
 {
     return name.substring (0, maximumStringLength);
 }
 
-juce::String Parameter::getShortName() const
-{
-    return shortName;
-}
-
-juce::String Parameter::getLabel() const
-{
-    return label;
-}
-
 int Parameter::getNumSteps() const
 {
-    if (range.interval == 0)
+    if (juce::exactlyEqual (range.interval, 0.0f))
         return 0;
     return juce::roundToInt ((range.end - range.start) / range.interval);
 }
@@ -249,6 +173,10 @@ juce::String Parameter::getText (float val, int /*maximumStringLength*/) const
         return textFunction (*this, range.convertFrom0to1 (val));
     
     auto uv = range.snapToLegalValue (range.convertFrom0to1 (val));
+    
+    if (juce::exactlyEqual (range.interval, 1.0f))
+        return juce::String (int (uv));
+    
     return formatNumber (uv);
 }
 

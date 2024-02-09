@@ -1,4 +1,3 @@
-#include <time.h>
 
 //==============================================================================
 UpdateChecker::UpdateChecker (gin::Processor& slProc_)
@@ -6,9 +5,8 @@ UpdateChecker::UpdateChecker (gin::Processor& slProc_)
 {
     if (auto props = slProc.getSettings())
     {
-       #ifdef JucePlugin_Name
-        juce::String url = props->getValue (JucePlugin_Name "_updateUrl");
-        int last   = props->getIntValue (JucePlugin_Name "_lastUpdateCheck");
+        juce::String url = props->getValue (slProc.processorOptions.pluginName + "_updateUrl");
+        int last   = props->getIntValue (slProc.processorOptions.pluginName + "_lastUpdateCheck");
 
         if (url.isNotEmpty())
         {
@@ -19,7 +17,6 @@ UpdateChecker::UpdateChecker (gin::Processor& slProc_)
         {
             startTimer (juce::Random::getSystemRandom().nextInt ({1500, 2500}));
         }
-       #endif
     }
 }
 
@@ -38,14 +35,13 @@ void UpdateChecker::timerCallback()
 void UpdateChecker::run()
 {
   #if ! JUCE_IOS
-   #ifdef JucePlugin_Name
-    juce::URL versionsUrl = juce::URL ("https://socalabs.com/version.xml").withParameter ("plugin", JucePlugin_Name).withParameter ("version", JucePlugin_VersionString);
+    juce::URL versionsUrl = juce::URL (slProc.processorOptions.updatesURL).withParameter ("plugin", slProc.processorOptions.pluginName).withParameter ("version", slProc.processorOptions.pluginVersion);
     juce::XmlDocument doc (versionsUrl.readEntireTextStream());
     if (std::unique_ptr<juce::XmlElement> root = doc.getDocumentElement())
     {
         if (auto props = slProc.getSettings())
         {
-            props->setValue (JucePlugin_Name "_lastUpdateCheck", int (time (nullptr)));
+            props->setValue (slProc.processorOptions.pluginName + "_lastUpdateCheck", int (time (nullptr)));
 
             auto* child = root->getChildElement (0);
             while (child)
@@ -54,9 +50,9 @@ void UpdateChecker::run()
                 juce::String ver  = child->getStringAttribute ("num");
                 juce::String url  = child->getStringAttribute ("url");
 
-                if (name == JucePlugin_Name && versionStringToInt (ver) > versionStringToInt (JucePlugin_VersionString))
+                if (name == slProc.processorOptions.pluginName && versionStringToInt (ver) > versionStringToInt (slProc.processorOptions.pluginVersion))
                 {
-                    props->setValue (JucePlugin_Name "_updateUrl", url);
+                    props->setValue (slProc.processorOptions.pluginName + "_updateUrl", url);
                     updateUrl = url;
                     triggerAsyncUpdate();
                     break;
@@ -66,7 +62,6 @@ void UpdateChecker::run()
             }
         }
     }
-   #endif
   #endif
 }
 
@@ -157,6 +152,10 @@ void NewsChecker::handleAsyncUpdate()
 TitleBar::TitleBar (ProcessorEditor& e, Processor& p)
   : editor (e), slProc (p)
 {
+    setName ("titlebar");
+
+    programs.setName ("presets");
+
     addAndMakeVisible (menuButton);
     addAndMakeVisible (browseButton);
     addAndMakeVisible (programs);
@@ -167,13 +166,6 @@ TitleBar::TitleBar (ProcessorEditor& e, Processor& p)
     addAndMakeVisible (infoButton);
 
     programs.addListener (this);
-    addButton.addListener (this);
-    deleteButton.addListener (this);
-    nextButton.addListener (this);
-    prevButton.addListener (this);
-    browseButton.addListener (this);
-    infoButton.addListener (this);
-    menuButton.addListener (this);
 
     programs.setTitle ("Select Preset");
     addButton.setTitle ("Add Preset");
@@ -195,11 +187,119 @@ TitleBar::TitleBar (ProcessorEditor& e, Processor& p)
 
     slProc.addChangeListener (this);
 
-    updateChecker = std::make_unique<UpdateChecker> (slProc);
-    updateChecker->onUpdate = [](juce::String) {};
+    if (slProc.processorOptions.useUpdateChecker)
+    {
+        updateChecker = std::make_unique<UpdateChecker> (slProc);
+        updateChecker->onUpdate = [](juce::String) {};
+    }
 
-    newsChecker = std::make_unique<NewsChecker> (slProc);
-    newsChecker->onNewsUpdate = [](juce::String) {};
+    if (slProc.processorOptions.useNewsChecker)
+    {
+        newsChecker = std::make_unique<NewsChecker> (slProc);
+        newsChecker->onNewsUpdate = [](juce::String) {};
+    }
+
+    nextButton.onClick = [this]
+    {
+        int prog = slProc.getCurrentProgram() + 1;
+        if (prog >= slProc.getPrograms().size())
+            prog = 0;
+
+        slProc.setCurrentProgram (prog);
+    };
+    prevButton.onClick = [this]
+    {
+        int prog = slProc.getCurrentProgram() - 1;
+        if (prog < 0)
+            prog = slProc.getPrograms().size() - 1;
+
+        slProc.setCurrentProgram (prog);
+    };
+    browseButton.onClick = [this]
+    {
+        browseButton.setToggleState (! browseButton.getToggleState(), juce::dontSendNotification);
+        editor.showPatchBrowser (browseButton.getToggleState());
+    };
+    addButton.onClick = [this]
+    {
+        Program* prog = nullptr;
+        
+        int progIdx = slProc.getCurrentProgram();
+        if (progIdx > 0)
+            prog = slProc.getPrograms()[progIdx];
+        
+        auto w = std::make_shared<gin::PluginAlertWindow> ("Create preset:", "", juce::AlertWindow::NoIcon, getParentComponent());
+        w->setLookAndFeel (slProc.lf.get());
+        w->addTextEditor ("name", prog != nullptr ? prog->name : juce::String(), "Name:");
+
+        if (hasBrowser)
+        {
+            w->addTextEditor ("author", prog != nullptr ? prog->author : juce::String(), "Author:");
+            w->addTextEditor ("tags", prog != nullptr ? juce::StringArray (prog->tags).joinIntoString (" ") : juce::String(), "Tags:");
+        }
+
+        w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+        w->runAsync (*getParentComponent(), [this, w] (int ret)
+        {
+            w->setVisible (false);
+            if (ret == 1)
+            {
+                auto txt = juce::File::createLegalFileName (w->getTextEditor ("name")->getText()).trim();
+                auto aut = (hasBrowser) ? juce::File::createLegalFileName (w->getTextEditor ("author")->getText()).trim() : juce::String();
+                auto tag = (hasBrowser) ? juce::File::createLegalFileName (w->getTextEditor ("tags")->getText()).trim() : juce::String();
+
+                if (slProc.hasProgram (txt))
+                {
+                    auto wc = std::make_shared<gin::PluginAlertWindow> ("Overwrite preset '" + txt + "'?", "", juce::AlertWindow::NoIcon, this);
+                    wc->addButton ("Yes", 1, juce::KeyPress (juce::KeyPress::returnKey));
+                    wc->addButton ("No", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+                    wc->setLookAndFeel (slProc.lf.get());
+
+                    wc->runAsync (*getParentComponent(), [this, aut, tag, txt, wc] (int r)
+                    {
+                        wc->setVisible (false);
+                        if (r == 1)
+                        {
+                            slProc.saveProgram (txt, aut, tag);
+                            refreshPrograms();
+                        }
+                    });
+                }
+                else if (txt.isNotEmpty())
+                {
+                    slProc.saveProgram (txt, aut, tag);
+                    refreshPrograms();
+                }
+            }
+        });
+    };
+    deleteButton.onClick = [this]
+    {
+        auto w = std::make_shared<gin::PluginAlertWindow> ("Delete preset '" + slProc.getProgramName (programs.getSelectedItemIndex()) + "'?", "", juce::AlertWindow::NoIcon, getParentComponent());
+        w->addButton ("Yes", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton ("No", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        w->setLookAndFeel (slProc.lf.get());
+
+        w->runAsync (*getParentComponent(), [this, w] (int r)
+        {
+            w->setVisible (false);
+            if (r == 1)
+            {
+                slProc.deleteProgram (programs.getSelectedItemIndex());
+                refreshPrograms();
+            }
+        });
+    };
+    infoButton.onClick = [this]
+    {
+        editor.showAboutInfo();
+    };
+    menuButton.onClick = [this]
+    {
+        showMenu();
+    };
 }
 
 TitleBar::~TitleBar ()
@@ -241,6 +341,16 @@ void TitleBar::setShowPresets (bool s)
     resized();
 }
 
+void TitleBar::setShowMenu (bool s)
+{
+    menuButton.setVisible (s);
+}
+
+void TitleBar::setShowInfo (bool s)
+{
+    infoButton.setVisible (s);
+}
+
 void TitleBar::resized()
 {
     auto programsRC = getLocalBounds().withSizeKeepingCentre (std::min (getWidth() - 200, 299), 23);
@@ -268,8 +378,9 @@ void TitleBar::resized()
 
     if (hasPresets)
     {
-        prevButton.setBounds (programsRC.removeFromLeft (programsRC.getHeight()).withSizeKeepingCentre (8, 8));
-        nextButton.setBounds (programsRC.removeFromRight (programsRC.getHeight()).withSizeKeepingCentre (8, 8));
+        auto sz = programsRC.getHeight();
+        prevButton.setBounds (programsRC.removeFromLeft (sz).withSizeKeepingCentre (sz, sz));
+        nextButton.setBounds (programsRC.removeFromRight (sz).withSizeKeepingCentre (sz, sz));
     }
     else
     {
@@ -285,8 +396,12 @@ void TitleBar::refreshPrograms()
 {
     programs.clear();
 
-    for (int i = 0; i < slProc.getNumPrograms(); i++)
+    for (int i = 0; i < slProc.getPrograms().size(); i++)
+    {
         programs.addItem (slProc.getProgramName (i), i + 1);
+        if (i == 0)
+            programs.addSeparator();
+    }
 
     programs.setSelectedItemIndex (slProc.getCurrentProgram(), juce::dontSendNotification);
     deleteButton.setEnabled (slProc.getCurrentProgram() != 0);
@@ -294,129 +409,50 @@ void TitleBar::refreshPrograms()
     editor.refreshPatchBrowser();
 }
 
-void TitleBar::buttonClicked (juce::Button* b)
-{
-    if (b == &nextButton)
-    {
-        int prog = slProc.getCurrentProgram() + 1;
-        if (prog >= slProc.getNumPrograms())
-            prog = 0;
-
-        slProc.setCurrentProgram (prog);
-    }
-    else if (b == &prevButton)
-    {
-        int prog = slProc.getCurrentProgram() - 1;
-        if (prog < 0)
-            prog = slProc.getNumPrograms() - 1;
-
-        slProc.setCurrentProgram (prog);
-    }
-    else if (b == &browseButton)
-    {
-        b->setToggleState (! b->getToggleState(), juce::dontSendNotification);
-        editor.showPatchBrowser (b->getToggleState());
-    }
-    else if (b == &addButton)
-    {
-        gin::PluginAlertWindow w ("Create preset:", "", juce::AlertWindow::NoIcon, getParentComponent());
-        w.setLookAndFeel (slProc.lf.get());
-        w.addTextEditor ("name", "", "Name:");
-
-        if (hasBrowser)
-        {
-            w.addTextEditor ("author", "", "Author:");
-            w.addTextEditor ("tags", "", "Tags:");
-        }
-
-        w.addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
-        w.addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-
-        if (w.runModalLoop (*getParentComponent()) == 1)
-        {
-            auto txt = juce::File::createLegalFileName (w.getTextEditor ("name")->getText());
-            auto aut = (hasBrowser) ? juce::File::createLegalFileName (w.getTextEditor ("author")->getText()) : juce::String();
-            auto tag = (hasBrowser) ? juce::File::createLegalFileName (w.getTextEditor ("tags")->getText()) : juce::String();
-
-            if (slProc.hasProgram (txt))
-            {
-                gin::PluginAlertWindow wc ("Overwrite preset '" + txt + "'?", "", juce::AlertWindow::NoIcon, this);
-                wc.addButton ("Yes", 1, juce::KeyPress (juce::KeyPress::returnKey));
-                wc.addButton ("No", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-                wc.setLookAndFeel (slProc.lf.get());
-
-                if (wc.runModalLoop (*this) == 0)
-                    return;
-            }
-
-            if (txt.isNotEmpty())
-            {
-                slProc.saveProgram (txt, aut, tag);
-                refreshPrograms();
-            }
-        }
-    }
-    else if (b == &deleteButton)
-    {
-        gin::PluginAlertWindow w ("Delete preset '" + slProc.getProgramName (programs.getSelectedItemIndex()) + "'?", "", juce::AlertWindow::NoIcon, getParentComponent());
-        w.addButton ("Yes", 1, juce::KeyPress (juce::KeyPress::returnKey));
-        w.addButton ("No", 0, juce::KeyPress (juce::KeyPress::escapeKey));
-        w.setLookAndFeel (slProc.lf.get());
-
-        if (w.runModalLoop (*getParentComponent()))
-        {
-            slProc.deleteProgram (programs.getSelectedItemIndex());
-            refreshPrograms();
-        }
-    }
-    else if (b == &infoButton)
-    {
-        editor.showAboutInfo();
-    }
-    else if (b == &menuButton)
-    {
-        showMenu();
-    }
-}
-
 void TitleBar::showMenu()
 {
     juce::PopupMenu m;
+    m.setLookAndFeel (&getLookAndFeel());
 
-    m.addItem ("Visit www.SocaLabs.com", []
+    if (slProc.processorOptions.urlTitle.isNotEmpty())
     {
-        juce::URL ("https://www.socalabs.com").launchInDefaultBrowser();
-    });
+        m.addItem (slProc.processorOptions.urlTitle, [this]
+        {
+            juce::URL (slProc.processorOptions.url).launchInDefaultBrowser();
+        });
+    }
 
     m.addSeparator();
 
-    auto updateUrl = updateChecker->getUpdateUrl();
-    m.addItem ("Get update", updateUrl.isNotEmpty(), false, [this, updateUrl]
+    if (updateChecker)
     {
-        juce::URL (updateUrl).launchInDefaultBrowser();
-
-       #ifdef JucePlugin_Name
-        if (auto props = slProc.getSettings())
-            props->setValue (JucePlugin_Name "_updateUrl", "");
-       #else
-        (void) this;
-       #endif
-    });
-
-    auto newsUrl = newsChecker->getNewsUrl();
-    m.addItem ("Read news", newsUrl.isNotEmpty(), false, [this, newsUrl]
-    {
-        juce::URL (newsUrl).launchInDefaultBrowser();
-
-        if (auto props = slProc.getSettings())
+        auto updateUrl = updateChecker->getUpdateUrl();
+        m.addItem ("Get update", updateUrl.isNotEmpty(), false, [this, updateUrl]
         {
-            props->setValue ("newsUrl", "");
+            juce::URL (updateUrl).launchInDefaultBrowser();
 
-            auto readNews = juce::StringArray::fromTokens (props->getValue ("readNews"), "|", "");
-            readNews.add (newsUrl);
-            props->setValue ("readNews", readNews.joinIntoString ("|"));
-        }
-    });
+            if (auto props = slProc.getSettings())
+                props->setValue (slProc.processorOptions.pluginName + "_updateUrl", "");
+        });
+    }
+
+    if (newsChecker)
+    {
+        auto newsUrl = newsChecker->getNewsUrl();
+        m.addItem ("Read news", newsUrl.isNotEmpty(), false, [this, newsUrl]
+        {
+            juce::URL (newsUrl).launchInDefaultBrowser();
+
+            if (auto props = slProc.getSettings())
+            {
+                props->setValue ("newsUrl", "");
+
+                auto readNews = juce::StringArray::fromTokens (props->getValue ("readNews"), "|", "");
+                readNews.add (newsUrl);
+                props->setValue ("readNews", readNews.joinIntoString ("|"));
+            }
+        });
+    }
 
     m.addSeparator();
 
@@ -424,6 +460,8 @@ void TitleBar::showMenu()
     {
         editor.setUseIncreasedKeyboardAccessibility (! editor.getUseIncreasedKeyboardAccessibility());
     });
+    
+    editor.addMenuItems (m);
 
     m.setLookAndFeel ( &getLookAndFeel());
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (menuButton).withDeletionCheck (menuButton));
@@ -536,6 +574,8 @@ ProcessorEditor::ProcessorEditor (Processor& p) noexcept
     addChildComponent (patchBrowser);
 
     titleBar.refreshPrograms();
+
+    triggerAsyncUpdate();
 }
 
 ProcessorEditor::ProcessorEditor (Processor& p, int cx_, int cy_) noexcept
@@ -549,11 +589,22 @@ ProcessorEditor::ProcessorEditor (Processor& p, int cx_, int cy_) noexcept
     addChildComponent (patchBrowser);
 
     titleBar.refreshPrograms();
+
+    triggerAsyncUpdate();
 }
 
 ProcessorEditor::~ProcessorEditor()
 {
     setLookAndFeel (nullptr);
+}
+
+void ProcessorEditor::handleAsyncUpdate()
+{
+    if (ginProcessor.state.getChildWithName ("instance").getProperty ("browserOpen", false))
+    {
+        titleBar.setBrowseButtonState (true);
+        showPatchBrowser (true);
+    }
 }
 
 void ProcessorEditor::paint (juce::Graphics& g)
@@ -591,27 +642,32 @@ void ProcessorEditor::resized()
 
 void ProcessorEditor::showAboutInfo()
 {
-juce::String msg;
+    juce::String msg;
 
-  #ifdef JucePlugin_Name
    #if JUCE_DEBUG
-    msg += JucePlugin_Name " v" JucePlugin_VersionString " (" __TIME__ " " __DATE__ ")\n\n";
+    msg += slProc.processorOptions.pluginName + " v" + slProc.processorOptions.pluginVersion + " (" __TIME__ " " __DATE__ ")\n\n";
    #else
-    msg += JucePlugin_Name " v" JucePlugin_VersionString " (" __DATE__ ")\n\n";
+    msg += slProc.processorOptions.pluginName + " v" + slProc.processorOptions.pluginVersion + " (" __DATE__ ")\n\n";
    #endif
-  #endif
-    msg += "Roland Rabien\n" + extraProgrammer +"\nRAW Material Software JUCE Framework\n";
-    if (additionalProgramming.isNotEmpty())
-        msg += additionalProgramming;
-    msg += "\n";
+    msg += slProc.processorOptions.programmingCredits.joinIntoString ("\n");
+
+    msg += "\n\n";
     msg += "Copyright ";
     msg += juce::String (&__DATE__[7]);
 
-    gin::PluginAlertWindow w ("---- About ----", msg, juce::AlertWindow::NoIcon, this);
-    w.addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
-    w.setLookAndFeel (slProc.lf.get());
+    auto w = std::make_shared<gin::PluginAlertWindow> ("---- About ----", msg, juce::AlertWindow::NoIcon, this);
+    w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->setLookAndFeel (slProc.lf.get());
 
-    w.runModalLoop (*this);
+    w->runAsync (*this, [w] (int)
+    {
+        w->setVisible (false);
+    });
+}
+
+void ProcessorEditor::refreshProgramsList()
+{
+    titleBar.refreshPrograms();
 }
 
 void ProcessorEditor::refreshPatchBrowser()
@@ -623,4 +679,6 @@ void ProcessorEditor::showPatchBrowser (bool p)
 {
     patchBrowser.toFront (false);
     patchBrowser.setVisible (p);
+
+    ginProcessor.state.getChildWithName ("instance").setProperty ("browserOpen", p, nullptr);
 }

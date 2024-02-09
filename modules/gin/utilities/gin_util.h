@@ -206,14 +206,6 @@ private:
     double start;
 };
 
-//==============================================================================
-/** Are two floats pretty close? */
-template <typename T>
-inline bool almostEqual (T a, T b, T precision = T (0.00001))
-{
-    return std::abs (a - b) < precision;
-}
-
 int versionStringToInt (const juce::String& versionString);
 
 //==============================================================================
@@ -223,7 +215,7 @@ void delayedLambda (std::function<void ()> callback, int delayMS);
 template <typename T>
 juce::String formatNumber (T v)
 {
-    if (v == 0)
+    if (juce::approximatelyEqual (v, T(0.0)))
         return "0";
     
     int dec = 0;

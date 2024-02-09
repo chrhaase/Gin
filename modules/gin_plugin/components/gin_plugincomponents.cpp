@@ -29,6 +29,7 @@ void Readout::paint (juce::Graphics& g)
 juce::TextEditor* Readout::createEditorComponent()
 {
     auto e = juce::Label::createEditorComponent();
+    e->removeColour (juce::TextEditor::textColourId);
     e->setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
     e->setColour (juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
     e->applyFontToAllText (getLookAndFeel().getLabelFont (*this), true);
@@ -48,7 +49,7 @@ void Readout::textWasEdited()
 ParamComponent::ParamComponent (Parameter* parameter_)
   : Component (""), parameter (parameter_)
 {
-    setName (parameter->getUid());
+    setName (parameter->getShortName());
 }
 
 //==============================================================================
@@ -108,6 +109,8 @@ Select::Select (Parameter* p)
 {
     addAndMakeVisible (&name);
     addAndMakeVisible (&comboBox);
+
+    comboBox.setScrollWheelEnabled (true);
 
     name.setText (parameter->getShortName(), juce::dontSendNotification);
     name.setJustificationType (juce::Justification::centred);

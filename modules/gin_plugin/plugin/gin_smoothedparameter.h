@@ -2,7 +2,8 @@
 
 class Processor;
 //==============================================================================
-/** A silky smooth parameter
+/** A silky smooth parameter. Use getProcValue(int) to get the next smoothed
+    value of the parameter.
 */
 template <class T>
 class SmoothedParameter : public gin::Parameter
@@ -39,7 +40,7 @@ public:
     void setUserValue (float v) override
     {
         v = juce::jlimit(range.start, range.end, range.snapToLegalValue (v));
-        if (! almostEqual (value, v))
+        if (! juce::approximatelyEqual (value, v))
         {
             value = v;
             smoother.setValue (range.convertTo0to1 (value));
@@ -51,7 +52,7 @@ public:
     void setUserValueNotifingHost (float v) override
     {
         v = juce::jlimit (range.start, range.end, range.snapToLegalValue (v));
-        if (! almostEqual (value, v))
+        if (! juce::approximatelyEqual (value, v))
         {
             value = v;
             smoother.setValue (range.convertTo0to1 (value));
@@ -67,7 +68,7 @@ public:
         valueIn = juce::jlimit (0.0f, 1.0f, valueIn);
         float newValue = range.snapToLegalValue (range.convertFrom0to1 (valueIn));
 
-        if (! almostEqual (value, newValue))
+        if (! juce::approximatelyEqual (value, newValue))
         {
             value = newValue;
             smoother.setValue (range.convertTo0to1 (value));

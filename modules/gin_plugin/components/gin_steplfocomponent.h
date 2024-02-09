@@ -7,11 +7,12 @@ class StepLFOComponent : public MultiParamComponent,
                          private juce::Timer
 {
 public:
-    StepLFOComponent() = default;
+    StepLFOComponent (int maxSteps_);
     ~StepLFOComponent() override = default;
 
-    void setBPM (float bpm);
     void setParams (Parameter::Ptr beat, Parameter::Ptr length, Parameter::Ptr* level, Parameter::Ptr enable);
+
+    std::function<std::vector<float>()> phaseCallback;
 
 private:
     void paint (juce::Graphics& g) override;
@@ -25,13 +26,13 @@ private:
     int getNumSteps();
 
     Parameter::Ptr beat, length, enable;
-    Parameter::Ptr level[32];
+    std::vector<Parameter::Ptr> level;
 
     StepLFO lfo;
     juce::Path path;
+    int maxSteps;
     bool dirty = true;
-    float bpm = 120.0f, curPhase = 0;
-    double lastUpdate = -1;
+    std::vector<float> curPhases;
     std::map<int,float> curve;
 
 private:

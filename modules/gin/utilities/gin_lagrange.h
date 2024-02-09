@@ -28,7 +28,7 @@ T interpolate (const juce::Array<Point<T>>& points, T x)
             if (i != j)
             {
                 auto d = points[i].x - points[j].x;
-                if (d != 0)
+                if (! juce::approximatelyEqual (d, T(0)))
                     term = term * (x - points[j].x ) / (d);
                 else
                     term = 0;
@@ -54,7 +54,7 @@ T interpolate (T xArr[], T yArr[], int num, T x)
             if (i != j)
             {
                 auto d = xArr[i] - xArr[j];
-                if (d != 0)
+                if (! juce::approximatelyEqual (d, 0.0f))
                     term = term * (x - xArr[j] ) / d;
                 else
                     term = 0;

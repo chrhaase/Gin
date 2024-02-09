@@ -17,60 +17,60 @@ inline int oddEven (int x)
 }
 
 //==============================================================================
-double sine (double phase, double, double)
+float sine (float phase, float, float)
 {
-    return std::sin (phase * 2 * juce::MathConstants<double>::pi);
+    return std::sin (phase * 2 * juce::MathConstants<float>::pi);
 }
 
-double triangle (double phase, double freq, double sampleRate)
+float triangle (float phase, float freq, float sampleRate)
 {
-    double sum = 0;
-    float k = 1;
+    float sum = 0.0f;
+    float k = 1.0f;
     while (freq * k < sampleRate / 2)
     {
-        sum += std::pow (-1, (k - 1) / 2.0f) / (k * k) * std::sin (k * (phase * 2 * juce::MathConstants<double>::pi));
+        sum += std::pow (-1.0f, (k - 1) / 2.0f) / (k * k) * std::sin (k * (phase * 2 * juce::MathConstants<float>::pi));
         k += 2;
     }
     return float (8.0f / (juce::MathConstants<float>::pi * juce::MathConstants<float>::pi) * sum);
 }
 
-double sawUp (double phase, double freq, double sampleRate)
+float sawUp (float phase, float freq, float sampleRate)
 {
-    double sum = 0;
+    float sum = 0;
     int k = 1;
     float fk = 1.0f;
     while (freq * k < sampleRate / 2)
     {
-        sum += oddEven (k) * std::sin (fk * (phase * 2 * juce::MathConstants<double>::pi)) / fk;
+        sum += oddEven (k) * std::sin (fk * (phase * 2 * juce::MathConstants<float>::pi)) / fk;
         k++;
         fk++;
     }
     return float (-2.0f / juce::MathConstants<float>::pi * sum);
 }
 
-double sawDown (double phase, double freq, double sampleRate)
+float sawDown (float phase, float freq, float sampleRate)
 {
-    double sum = 0;
+    float sum = 0;
     int k = 1;
     float fk = 1.0f;
     while (freq * k < sampleRate / 2)
     {
-        sum += oddEven (k) * std::sin (fk * (phase * 2 * juce::MathConstants<double>::pi)) / fk;
+        sum += oddEven (k) * std::sin (fk * (phase * 2 * juce::MathConstants<float>::pi)) / fk;
         k++;
         fk++;
     }
     return float (2.0f / juce::MathConstants<float>::pi * sum);
 }
 
-double pulse (double phase, double pw, double freq, double sampleRate)
+float pulse (float phase, float pw, float freq, float sampleRate)
 {
     if (pw == 0.5)
     {
-        double sum = 0;
+        float sum = 0;
         float i = 1;
         while (freq * (2 * i - 1) < sampleRate / 2)
         {
-            sum += std::sin ((2 * i - 1) * (phase * 2 * juce::MathConstants<double>::pi)) / ((2 * i - 1));
+            sum += std::sin ((2 * i - 1) * (phase * 2 * juce::MathConstants<float>::pi)) / ((2 * i - 1));
             i++;
         }
 
@@ -78,68 +78,81 @@ double pulse (double phase, double pw, double freq, double sampleRate)
     }
     else
     {
-        pw = juce::jlimit (0.05, 0.95, pw);
-        return sawUp (phase + 0.5 * pw, freq, sampleRate) - sawUp (phase - 0.5 * pw, freq, sampleRate);
+        pw = juce::jlimit (0.05f, 0.95f, pw);
+        return sawUp (phase + 0.5f * pw, freq, sampleRate) - sawUp (phase - 0.5f * pw, freq, sampleRate);
     }
 }
 
-double squareWave (double phase, double freq, double sampleRate)
+float squareWave (float phase, float freq, float sampleRate)
 {
-    double sum = 0;
+    float sum = 0;
     float i = 1;
     while (freq * (2 * i - 1) < sampleRate / 2)
     {
-        sum += std::sin ((2 * i - 1) * (phase * 2 * juce::MathConstants<double>::pi)) / ((2 * i - 1));
+        sum += std::sin ((2 * i - 1) * (phase * 2 * juce::MathConstants<float>::pi)) / ((2 * i - 1));
         i++;
     }
 
     return float (4.0f / juce::MathConstants<float>::pi * sum);
 }
 
-double noise()
-{
-    const float mean = 0.0f;
-    const float stddev = 0.1f;
-
-    static std::default_random_engine generator;
-    static std::normal_distribution<float> dist (mean, stddev);
-
-    return dist (generator);
-}
-
 //==============================================================================
-void BandLimitedLookupTable::loadFromBuffer (juce::AudioSampleBuffer& buffer, double sampleRate, int notesPerTable_)
+void BandLimitedLookupTable::loadFromBuffer (std::unique_ptr<juce::dsp::FFT>& fft, float playbackSampleRate, juce::AudioSampleBuffer& buffer, float fileSampleRate, int notesPerTable_)
 {
     tables.clear();
 
-    double duration = buffer.getNumSamples() / sampleRate;
-    double baseFreq = 1.0 / duration;
+    float duration = buffer.getNumSamples() / fileSampleRate;
+    float baseFreq = 1.0f / duration;
     int sz = buffer.getNumSamples();
 
+    tableSize = sz;
     notesPerTable = notesPerTable_;
 
-    for (double note = notesPerTable + 0.5; note < 127.0; note += notesPerTable)
+    if (fft == nullptr || fft->getSize() != sz)
+         fft = std::make_unique<juce::dsp::FFT> (juce::roundToInt (std::log2 (sz)));
+    jassert (fft->getSize() == sz);
+
+    std::vector<juce::dsp::Complex<float>> time;
+    std::vector<juce::dsp::Complex<float>> freq;
+
+    time.resize (size_t (sz));
+    freq.resize (size_t (sz));
+
+    auto d = buffer.getReadPointer (0);
+    for (auto i = 0; i < sz; i++)
+        time[size_t (i)] = { d[i], 0.0f };
+
+    fft->perform (time.data(), freq.data(), false);
+
+    for (float note = notesPerTable + 0.5f; note < 127.0f; note += notesPerTable)
     {
         auto noteFreq = getMidiNoteInHertz (note);
         if (noteFreq < baseFreq)
         {
-            auto func = [&] (float phase)
-            {
-                auto data = buffer.getReadPointer (0);
-                return data[int (phase * float ( sz )) % sz];
-            };
-
-            tables.add (new juce::dsp::LookupTableTransform<float> (func, 0.0f, 1.0f, (size_t) sz + 1));
+            auto& t = tables.emplace_back (std::vector<float>());
+            t.resize (size_t (sz));
+            std::memcpy (t.data(), buffer.getReadPointer (0), size_t (sz) * sizeof (float));
         }
         else
         {
-            auto func = [&] (float phase)
+            auto index2Freq = [&] (int i)
             {
-                auto data = buffer.getReadPointer (0);
-                return data[int (phase * float( sz )) % sz];
+                return float (i * (fileSampleRate / sz));
             };
 
-            tables.add (new juce::dsp::LookupTableTransform<float> (func, 0.0f, 1.0f, (size_t) sz + 1));
+            auto ratio = noteFreq / baseFreq;
+
+            for (auto i = 0; i < sz; i++)
+                if (index2Freq (i) * ratio > playbackSampleRate / 2)
+                    freq[size_t (i)] = {0.0f, 0.0f};
+
+            fft->perform (freq.data(), time.data(), true);
+
+            auto& t = tables.emplace_back (std::vector<float>());
+            t.resize (size_t (sz));
+
+            for (auto i = 0; i < sz; i++)
+                t[size_t (i)] = time[size_t(i)].real();
         }
      }
 }
@@ -149,22 +162,22 @@ BandLimitedLookupTables::BandLimitedLookupTables (double sampleRate_, int notesP
   : sampleRate (sampleRate_),
     notesPerTable (notesPerTable_),
     tableSize (tableSize_),
-    sineTable (sine, sampleRate, 64, tableSize),
-    sawUpTable (sawUp, sampleRate, notesPerTable, tableSize),
-    sawDownTable (sawDown, sampleRate, notesPerTable, tableSize),
-    triangleTable (triangle, sampleRate, notesPerTable, tableSize)
+    sineTable (sine, float (sampleRate), 64, tableSize),
+    sawUpTable (sawUp, float (sampleRate), notesPerTable, tableSize),
+    sawDownTable (sawDown, float (sampleRate), notesPerTable, tableSize),
+    triangleTable (triangle, float (sampleRate), notesPerTable, tableSize)
 {
 
 }
 
 void BandLimitedLookupTables::setSampleRate (double sampleRate_)
 {
-    if (sampleRate != sampleRate_)
+    if (! juce::approximatelyEqual (sampleRate, sampleRate_))
     {
         sampleRate = sampleRate_;
-        sineTable.reset (sine, sampleRate, 64, tableSize);
-        sawUpTable.reset (sawUp, sampleRate, notesPerTable, tableSize);
-        sawDownTable.reset (sawDown, sampleRate, notesPerTable, tableSize);
-        triangleTable.reset (triangle, sampleRate, notesPerTable, tableSize);
+        sineTable.reset (sine, float (sampleRate), 64, tableSize);
+        sawUpTable.reset (sawUp, float (sampleRate), notesPerTable, tableSize);
+        sawDownTable.reset (sawDown, float (sampleRate), notesPerTable, tableSize);
+        triangleTable.reset (triangle, float (sampleRate), notesPerTable, tableSize);
     }
 }

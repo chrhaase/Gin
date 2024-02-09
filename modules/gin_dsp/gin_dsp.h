@@ -22,9 +22,9 @@
   description:          Gin DSP Utilities
   website:              www.rabiensoftware.com
   license:              BSD
- minimumCppStandard:    17
+  minimumCppStandard:   20
 
-  dependencies:         gin juce_core juce_audio_utils juce_dsp
+  dependencies:         gin gin_simd juce_core juce_audio_utils juce_dsp
 
  END_JUCE_MODULE_DECLARATION
 
@@ -33,7 +33,7 @@
 
 #pragma once
 
-#ifndef JUCE_MODULE_AVAILABLE_gin
+#ifndef JUCE_MODULE_AVAILABLE_gin_dsp
  /* If you fail to make sure that all your compile units are building JUCE with the same set of
     option flags, then there's a risk that different compile units will treat the classes as having
     different memory layouts, leading to very nasty memory corruption errors when they all get
@@ -65,6 +65,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_dsp/juce_dsp.h>
 #include <gin/gin.h>
+#include <gin_simd/gin_simd.h>
 
 #if defined (__clang__)
  #pragma clang diagnostic pop
@@ -72,7 +73,19 @@
 
 #include <map>
 #include <random>
+#ifndef _USE_MATH_DEFINES
+ #define _USE_MATH_DEFINES
+#endif
 #include <cmath>
+
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
+
+#include "3rdparty/AudioFilter/src/AudioFilterTypes.h"
+#include "3rdparty/AudioFilter/src/FilterInstance.h"
+#include "3rdparty/AudioFilter/src/ParametricCreator.h"
+#include "3rdparty/AudioFilter/src/Response.h"
+
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 namespace gin
 {
@@ -89,13 +102,17 @@ namespace gin
 #include "dsp/gin_delayline.h"
 #include "dsp/gin_dynamics.h"
 #include "dsp/gin_easedvaluesmoother.h"
+#include "dsp/gin_fastmath.h"
 #include "dsp/gin_filter.h"
 #include "dsp/gin_eq.h"
 #include "dsp/gin_gateeffect.h"
 #include "dsp/gin_lfo.h"
 #include "dsp/gin_midififo.h"
 #include "dsp/gin_modulation.h"
+#include "dsp/gin_mseg.h"
+#include "dsp/gin_noise.h"
 #include "dsp/gin_oscillators.h"
+#include "dsp/gin_platereverb.h"
 #include "dsp/gin_resamplingfifo.h"
 #include "dsp/gin_sample.h"
 #include "dsp/gin_sampleoscillator.h"
@@ -115,6 +132,7 @@ namespace gin
 #include "components/gin_levelmeter.h"
 #include "components/gin_triggeredscope.h"
 #include "components/gin_waveformcomponent.h"
+#include "components/gin_wavetablecomponent.h"
 #include "components/gin_xyscope.h"
 
 }

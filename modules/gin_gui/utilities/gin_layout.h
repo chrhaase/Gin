@@ -1,5 +1,8 @@
 #pragma once
 
+//==============================================================================
+/** Layout components with json, supports hot reloading
+ */
 class Layout
 #if ! JUCE_IOS
     : public FileSystemWatcher::Listener
@@ -13,12 +16,12 @@ public:
     ~Layout() override;
    #endif
 
-    void setLayout (const juce::String& filename, const juce::File& source);
+    void setLayout (const juce::String& filename, const juce::File& source = {});
 
 private:
     void setupParser();
 
-    void parseLayout (const juce::String& content);
+    bool parseLayout (const juce::String& content);
     int parse (const juce::var& equation, int equationIndex);
 
     void doComponent (const juce::String& currentPath, const juce::var& components);

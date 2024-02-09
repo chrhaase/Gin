@@ -485,17 +485,17 @@ void applyBrightnessContrast (juce::Image& img, float brightness, float contrast
 
     juce::Image::BitmapData data (img, juce::Image::BitmapData::readWrite);
 
-    double multiply = 1;
-    double divide = 1;
+    double multiply = 1.0;
+    double divide = 1.0;
 
     if (contrast < 0)
     {
         multiply = contrast + 100;
-        divide = 100;
+        divide = 100.0;
     }
     else if (contrast > 0)
     {
-        multiply = 100;
+        multiply = 100.0;
         divide = 100 - contrast;
     }
     else
@@ -506,7 +506,7 @@ void applyBrightnessContrast (juce::Image& img, float brightness, float contrast
 
     uint8_t* rgbTable = new uint8_t[65536];
 
-    if (divide == 0)
+    if (juce::exactlyEqual (divide, 0.0))
     {
         for (int intensity = 0; intensity < 256; intensity++)
         {
@@ -516,7 +516,7 @@ void applyBrightnessContrast (juce::Image& img, float brightness, float contrast
                 rgbTable[intensity] = 255;
         }
     }
-    else if (divide == 100)
+    else if (juce::exactlyEqual (divide, 100.0))
     {
         for (int intensity = 0; intensity < 256; intensity++)
         {
@@ -556,7 +556,7 @@ void applyBrightnessContrast (juce::Image& img, float brightness, float contrast
             uint8_t b = s->getBlue();
             uint8_t a = s->getAlpha();
 
-            if (divide == 0)
+            if (juce::exactlyEqual (divide, 0.0))
             {
                 int i = getIntensity (toByte (r), toByte (g), toByte (b));
                 uint8_t c = rgbTable[i];
@@ -667,7 +667,7 @@ void applyHueSaturationLightness (juce::Image& img, float hue, float saturation,
     else jassertfalse;
 }
 
-juce::Image applyResize (const juce::Image& src, int width, int height)
+juce::Image applyResize (const juce::Image& src, int width, int height, ResizeAlgorirm resizeAlgorirm)
 {
     juce::Image dst (src.getFormat(), width, height, true);
 
@@ -694,15 +694,28 @@ juce::Image applyResize (const juce::Image& src, int width, int height)
                 srcData.getLinePointer (y),
                 (size_t) (src.getWidth() * channels));
 
-   #if USE_SSE
-    avir::CImageResizer<avir::fpclass_float4> imageResizer (8);
-    imageResizer.resizeImage (rawSrc, src.getWidth(), src.getHeight(), 0,
-                                rawDst, dst.getWidth(), dst.getHeight(), channels, 0);
-   #else
-    avir::CImageResizer<> imageResizer (8);
-    imageResizer.resizeImage (rawSrc, src.getWidth(), src.getHeight(), 0,
-                                    rawDst, dst.getWidth(), dst.getHeight(), channels, 0);
-   #endif
+    if (resizeAlgorirm == ResizeAlgorirm::avir)
+    {
+       #if USE_SSE
+        avir::CImageResizer<avir::fpclass_float4> imageResizer (8);
+        imageResizer.resizeImage (rawSrc, src.getWidth(), src.getHeight(), 0,
+                                  rawDst, dst.getWidth(), dst.getHeight(), channels, 0);
+       #else
+        avir::CImageResizer<> imageResizer (8);
+        imageResizer.resizeImage (rawSrc, src.getWidth(), src.getHeight(), 0,
+                                  rawDst, dst.getWidth(), dst.getHeight(), channels, 0);
+       #endif
+    }
+    else
+    {
+        auto elementsIn = src.getWidth() * channels;
+        auto elementsOut = dst.getWidth() * channels;
+
+        avir::CLancIR imageResizer;
+        imageResizer.resizeImage (rawSrc, src.getWidth(), src.getHeight(), elementsIn,
+                                  rawDst, dst.getWidth(), dst.getHeight(), elementsOut, channels, 0);
+
+    }
 
     for (int y = 0; y < dst.getHeight(); y++)
         memcpy (dstData.getLinePointer (y),
@@ -712,11 +725,11 @@ juce::Image applyResize (const juce::Image& src, int width, int height)
     return dst;
 }
 
-juce::Image applyResize (const juce::Image& src, float factor)
+juce::Image applyResize (const juce::Image& src, float factor, ResizeAlgorirm resizeAlgorirm)
 {
     return applyResize (src,
-                        juce::roundToInt (factor * float ( src.getWidth() )),
-                        juce::roundToInt (factor * float ( src.getHeight() )));
+                        juce::roundToInt (factor * float (src.getWidth())),
+                        juce::roundToInt (factor * float (src.getHeight())), resizeAlgorirm);
 }
 
 template <class T>

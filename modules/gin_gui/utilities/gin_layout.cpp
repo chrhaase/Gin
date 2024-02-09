@@ -199,12 +199,18 @@ void Layout::setLayout (const juce::String& filename, const juce::File& source)
            #if JUCE_DEBUG
             if (source.existsAsFile())
             {
-                layoutFile = source;
-                parseLayout (layoutFile.loadFileAsString());
-               #if ! JUCE_IOS
-                watcher.addFolder (source.getParentDirectory());
-               #endif
-                break;
+                if (auto rawLayout = source.loadFileAsString(); rawLayout.isNotEmpty() && parseLayout (rawLayout))
+                {
+                    layoutFile = source;
+                   #if ! JUCE_IOS
+                    watcher.addFolder (source.getParentDirectory());
+                   #endif
+                    break;
+                }
+                else
+                {
+                    DBG("Unable to load layout file. Is your app sandboxed?");
+                }
             }
            #endif
             int sz = 0;
@@ -214,22 +220,26 @@ void Layout::setLayout (const juce::String& filename, const juce::File& source)
             break;
         }
     }
+   #else
+    jassertfalse; // you have no binary data, can't load layout
    #endif
 }
 
-void Layout::parseLayout (const juce::String& content)
+bool Layout::parseLayout (const juce::String& content)
 {
     juce::var obj;
     auto err = juce::JSON::parse (content, obj);
-    if (! err.wasOk())
+    if (! err.wasOk() && ! obj.isObject())
     {
         jassertfalse;
-        return;
+        return false;
     }
 
     componentMap = findAllComponents();
     doComponent ({}, obj);
     componentMap = {};
+                    
+    return true;
 }
 
 void Layout::doComponent (const juce::String& currentPath, const juce::var& component)
@@ -276,13 +286,23 @@ juce::Component* Layout::setBounds (const juce::String& currentPath, const juce:
 
     std::optional<int> x;
     std::optional<int> y;
+    std::optional<int> r;
+    std::optional<int> b;
     std::optional<int> w;
     std::optional<int> h;
 
-    if (component.hasProperty ("x"))
-        x = parse (component[ "x" ], idIdx);
-    if (component.hasProperty ("y"))
-        y = parse (component["y"], idIdx);
+    if (component.hasProperty ("x"))    x = parse (component["x"], idIdx);
+    if (component.hasProperty ("y"))    y = parse (component["y"], idIdx);
+    if (component.hasProperty ("r"))    r = parse (component["r"], idIdx);
+    if (component.hasProperty ("b"))    b = parse (component["b"], idIdx);
+
+    if (component.hasProperty ("w"))    w = parse (component["w"], idIdx);
+    if (component.hasProperty ("h"))    h = parse (component["h"], idIdx);
+
+    if (r.has_value() && x.has_value()) w = *r - *x;
+    if (b.has_value() && y.has_value()) h = *b - *y;
+    if (r.has_value() && w.has_value()) x = *r - *w;
+    if (b.has_value() && h.has_value()) y = *b - *h;
 
     if (component.hasProperty ("bounds"))
     {
@@ -305,11 +325,6 @@ juce::Component* Layout::setBounds (const juce::String& currentPath, const juce:
             jassertfalse;
         }
     }
-
-    if (component.hasProperty ("w"))
-        w = parse (component["w"], idIdx);
-    if (component.hasProperty ("h"))
-        h = parse (component["h"], idIdx);
 
     if (x.has_value() && y.has_value())
         curComponent->setTopLeftPosition (*x, *y);

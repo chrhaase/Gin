@@ -21,6 +21,16 @@ CopperLookAndFeel::CopperLookAndFeel()
     setColour (title2ColourId, juce::Colour (0xff25272B));
     setColour (accentColourId, juce::Colour (0xffCC8866));
 
+    setColour (WavetableComponent::waveColourId, juce::Colours::green.withAlpha (0.3f));
+    setColour (WavetableComponent::activeWaveColourId, juce::Colours::yellow);
+
+    setColour (juce::BubbleComponent::backgroundColourId, findColour (backgroundColourId));
+    setColour (juce::BubbleComponent::outlineColourId, findColour (grey45ColourId));
+    
+    setColour (juce::TooltipWindow::textColourId, findColour (grey60ColourId));
+
+    setColour (juce::ScrollBar::thumbColourId, findColour (grey60ColourId));
+
     setColour (juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colours::white.withAlpha (0.8f));
     setColour (juce::MidiKeyboardComponent::blackNoteColourId, juce::Colours::black.withAlpha (0.8f));
     setColour (juce::MidiKeyboardComponent::keySeparatorLineColourId, findColour (grey90ColourId));
@@ -118,7 +128,7 @@ void CopperLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
 
     const float thickness = (radius - 1) / radius;
 
-    g.setColour (slider.findColour (juce::Slider::trackColourId));
+    g.setColour (slider.findColour (juce::Slider::trackColourId).withMultipliedAlpha (slider.isEnabled() ? 1.0f : 0.5f));
 
     // Draw knob
     {
@@ -159,7 +169,7 @@ void CopperLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
         auto depth = (float)slider.getProperties()["modDepth"];
         bool bipolar = (bool)slider.getProperties()["modBipolar"];
 
-        g.setColour (juce::Colours::red.withAlpha (0.8f));
+        g.setColour (findColour (GinLookAndFeel::whiteColourId).withAlpha (0.9f));
 
         juce::Path filledArc;
         if (bipolar)
@@ -179,7 +189,7 @@ void CopperLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w
 
     if (slider.getProperties().contains ("modValues") && slider.isEnabled())
     {
-        g.setColour (juce::Colours::red.withAlpha (0.8f));
+        g.setColour (findColour (GinLookAndFeel::whiteColourId).withAlpha (0.9f));
 
         auto varArray = slider.getProperties()["modValues"];
         if (varArray.isArray())
@@ -203,15 +213,6 @@ void CopperLookAndFeel::drawButtonBackground (juce::Graphics&, juce::Button&, co
 
 void CopperLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool, bool)
 {
-    {
-        auto rc = b.getLocalBounds().toFloat();
-
-        g.setColour (findColour (PluginLookAndFeel::glass1ColourId));
-        g.fillRoundedRectangle (rc, rc.getHeight() / 2);
-        g.setColour (findColour (PluginLookAndFeel::glass2ColourId));
-        g.drawRoundedRectangle (rc, rc.getHeight() / 2, 1.0f);
-    }
-
     auto c = b.findColour (b.getToggleState() ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId).withMultipliedAlpha (b.isEnabled() ? 1.0f : 0.5f);
 
     if (b.isMouseOver() && b.isEnabled())
@@ -219,13 +220,12 @@ void CopperLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, 
 
     g.setColour (c);
 
-    auto text = b.getButtonText();
-    if (text.startsWith ("svg:"))
+    if (auto svg = dynamic_cast<SVGButton*> (&b))
     {
-        auto path = parseSVGPath (text.substring (4));
+        auto path = parseSVGPath (svg->rawSVG);
         auto font = getTextButtonFont (b, b.getHeight());
 
-        int sz = std::min (b.getHeight(), b.getWidth());
+        int sz = std::min (b.getHeight(), b.getWidth()) - svg->inset;
 
         auto rc = b.getLocalBounds().toFloat().withSizeKeepingCentre (float (sz), float (sz));
         g.fillPath (path, path.getTransformToScaleToFit (rc, true));
@@ -285,7 +285,7 @@ juce::PopupMenu::Options CopperLookAndFeel::getOptionsForComboBoxPopupMenu (juce
                                      .withItemThatMustBeVisible (box.getSelectedId())
                                      .withInitiallySelectedItem (box.getSelectedId())
                                      .withMinimumWidth (box.getWidth())
-                                     .withMaximumNumColumns (1);
+                                     .withMaximumNumColumns (20);
 }
 
 //==============================================================================

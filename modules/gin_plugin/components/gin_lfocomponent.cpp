@@ -1,4 +1,9 @@
 
+LFOComponent::LFOComponent()
+{
+    setName ("lfo");
+}
+
 void LFOComponent::resized()
 {
     dirty = true;
@@ -28,11 +33,6 @@ void LFOComponent::paramChanged ()
     dirty = true;
 }
 
-void LFOComponent::setBPM (float bpm_)
-{
-    bpm = bpm_;
-}
-
 void LFOComponent::createPath (juce::Rectangle<int> area)
 {
     lfo.setSampleRate ((double) area.getWidth());
@@ -58,6 +58,9 @@ void LFOComponent::createPath (juce::Rectangle<int> area)
     for (int x = area.getX(); x <= area.getRight(); x++)
     {
         auto v = lfo.process (1);
+        
+        if (unclamped)
+            v = lfo.getOutputUnclamped();
 
         if (x == area.getX())
             path.startNewSubPath ({float (area.getX()), vToY (v)});
@@ -78,55 +81,40 @@ void LFOComponent::paint (juce::Graphics& g)
         createPath (rc);
     }
 
-    auto c = findColour (isEnabled() ? GinLookAndFeel::colourId5 : GinLookAndFeel::colourId2);
-
-    g.setColour (c.withMultipliedAlpha (0.35f));
+    g.setColour (dimIfNeeded (findColour (GinLookAndFeel::whiteColourId).withAlpha (0.3f)));
     g.fillRect (rc.getX(), rc.getCentreY(), rc.getWidth(), 1);
 
-    g.setColour (c.withMultipliedAlpha (0.5f));
+    auto c = findColour (GinLookAndFeel::accentColourId).withAlpha (0.7f);
+
+    g.setColour (dimIfNeeded (c));
     g.strokePath (path, juce::PathStrokeType (1.5f));
 
     if (isEnabled())
     {
         auto lerp = [] (float t, float a, float b)  { return a + t * (b - a); };
 
-        float x = curPhase * rc.getWidth();
-        float t = x - int (x);
-        float y = lerp (t, curve[int(x)], curve[int(x) + 1]);
-
-        g.setColour (c);
-        g.fillEllipse (rc.getX() + x - 2, y - 2, 4, 4);
+        for (auto curPhase : curPhases)
+        {
+            float x = std::fmod (curPhase / getNumSteps(), 1.0f) * rc.getWidth();
+            float t = x - int (x);
+            float y = lerp (t, curve[int(x)], curve[int(x) + 1]);
+            
+            g.setColour (dimIfNeeded (findColour (GinLookAndFeel::whiteColourId).withAlpha (0.9f)));
+            g.fillEllipse (rc.getX() + x - 2, y - 2, 4, 4);
+        }
     }
 }
 
 void LFOComponent::timerCallback()
 {
-    if (lastUpdate == -1)
+    if (isEnabled() && phaseCallback)
     {
-        lastUpdate = juce::Time::getMillisecondCounter() / 1000.0;
-    }
-    else
-    {
-        double now = juce::Time::getMillisecondCounter() / 1000.0;
-        double delta = now - lastUpdate;
-        lastUpdate = now;
-
-        if (sync->isOn())
+        auto newPhases = phaseCallback();
+        if (newPhases != curPhases)
         {
-            auto duration = NoteDuration::getNoteDurations()[size_t (beat->getUserValue())];
-            const float hz = 1.0f / duration.toSeconds (bpm);
-            curPhase += float (hz * delta) / getNumSteps();
+            curPhases = newPhases;
+            repaint();
         }
-        else
-        {
-            curPhase += float (rate->getProcValue() * delta) / getNumSteps();
-        }
-
-        curPhase = std::fmod (curPhase, 1.0f);
-        if (std::isnan (curPhase) || std::isinf (curPhase))
-            curPhase = 0.0f;
-
-        repaint();
     }
 }
 

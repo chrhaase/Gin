@@ -8,7 +8,11 @@ Knob::Knob (Parameter* p, bool fromCentre)
     addAndMakeVisible (name);
     addAndMakeVisible (value);
     addAndMakeVisible (knob);
-    addChildComponent (modButton);
+    addChildComponent (modDepthSlider);
+    
+    modDepthSlider.setRange (-1.0, 1.0, 0.01);
+    modDepthSlider.setPopupDisplayEnabled (true, true, findParentComponentOfClass<juce::AudioProcessorEditor>());
+    modDepthSlider.setDoubleClickReturnValue (true, 0.0);
 
     knob.setTitle (parameter->getName (100));
     knob.setDoubleClickReturnValue (true, parameter->getUserDefaultValue());
@@ -40,17 +44,25 @@ Knob::Knob (Parameter* p, bool fromCentre)
     modTimer.onTimer = [this] ()
     {
         auto& mm = *parameter->getModMatrix();
-        auto curModValues = liveValuesCallback ? liveValuesCallback() : mm.getLiveValues (parameter);
-        if (curModValues != modValues)
+        if (mm.shouldShowLiveModValues())
         {
-            modValues = curModValues;
+            auto curModValues = liveValuesCallback ? liveValuesCallback() : mm.getLiveValues (parameter);
+            if (curModValues != modValues)
+            {
+                modValues = curModValues;
 
-            juce::Array<juce::var> vals;
-            for (auto v : modValues)
-                vals.add (v);
+                juce::Array<juce::var> vals;
+                for (auto v : modValues)
+                    vals.add (v);
 
-            knob.getProperties().set ("modValues", vals);
+                knob.getProperties().set ("modValues", vals);
 
+                repaint();
+            }
+        }
+        else if (knob.getProperties().contains ("modValues"))
+        {
+            knob.getProperties().remove ("modValues");
             repaint();
         }
     };
@@ -60,7 +72,18 @@ Knob::Knob (Parameter* p, bool fromCentre)
         knob.setInterceptsMouseClicks (! learning || shift, ! learning || shift );
     };
 
-    modButton.onClick = [this] { showModMenu(); };
+    modDepthSlider.onClick = [this] { showModMenu(); };
+    modDepthSlider.setMouseDragSensitivity (500);
+    modDepthSlider.onValueChange = [this]
+    {
+        if (auto mm = parameter->getModMatrix())
+        {
+            auto dst = ModDstId (parameter->getModIndex());
+
+            if (auto depths = mm->getModDepths (dst); depths.size() > 0)
+                mm->setModDepth (depths[0].first, dst, float (modDepthSlider.getValue()));
+        }
+    };
     modMatrixChanged();
 }
 
@@ -76,6 +99,7 @@ Knob::~Knob()
 void Knob::showModMenu()
 {
     juce::PopupMenu m;
+    m.setLookAndFeel (&getLookAndFeel());
 
     auto& mm = *parameter->getModMatrix();
     for (auto src : mm.getModSources (parameter))
@@ -89,9 +113,18 @@ void Knob::showModMenu()
     m.showMenuAsync ({});
 }
 
+void Knob::paint (juce::Graphics& g)
+{
+    if (dragOver)
+    {
+        g.setColour (findColour (PluginLookAndFeel::accentColourId, true).withAlpha (0.3f));
+        g.fillEllipse (knob.getBounds().toFloat());
+    }
+}
+
 void Knob::resized()
 {
-    juce::Rectangle<int> r = getLocalBounds().reduced (2);
+    auto r = getLocalBounds().reduced (2);
 
     auto extra = r.getHeight() - r.getWidth();
 
@@ -101,7 +134,7 @@ void Knob::resized()
     value.setBounds (rc);
     knob.setBounds (r.reduced (2));
 
-    modButton.setBounds (knob.getBounds().removeFromTop (7).removeFromRight (7));
+    modDepthSlider.setBounds (knob.getBounds().removeFromTop (7).removeFromRight (7).reduced (-3));
 }
 
 void Knob::mouseEnter (const juce::MouseEvent&)
@@ -195,13 +228,18 @@ void Knob::modMatrixChanged()
         if (mm->isModulated (dst) || liveValuesCallback)
         {
             modTimer.startTimerHz (30);
-            modButton.setVisible (mm->isModulated (dst));
+            modDepthSlider.setVisible (mm->isModulated (dst));
+
+            if (auto depths = mm->getModDepths (dst); depths.size() > 0)
+                modDepthSlider.setValue (depths[0].second, juce::dontSendNotification);
+            else
+                modDepthSlider.setValue (0.0f, juce::dontSendNotification);
         }
         else
         {
             modTimer.stopTimer();
             knob.getProperties().remove ("modValues");
-            modButton.setVisible (false);
+            modDepthSlider.setVisible (false);
         }
 
         if (learning && ! isMouseButtonDown (true))
@@ -215,6 +253,9 @@ void Knob::modMatrixChanged()
 
 void Knob::mouseDown (const juce::MouseEvent& e)
 {
+    if (! isEnabled())
+        return;
+
     bool shift = juce::ModifierKeys::getCurrentModifiersRealtime().isShiftDown();
     if (shift || ! learning || ! knob.getBounds().contains (e.getMouseDownPosition()))
         return;
@@ -230,6 +271,9 @@ void Knob::mouseDown (const juce::MouseEvent& e)
 
 void Knob::mouseDrag (const juce::MouseEvent& e)
 {
+    if (! isEnabled())
+        return;
+
     bool shift = juce::ModifierKeys::getCurrentModifiersRealtime().isShiftDown();
     if (shift || ! learning || ! knob.getBounds().contains (e.getMouseDownPosition()))
          return;
@@ -249,4 +293,37 @@ void Knob::mouseDrag (const juce::MouseEvent& e)
 
         repaint();
     }
+}
+
+bool Knob::isInterestedInDragSource (const SourceDetails& sd)
+{
+    if (isEnabled() && parameter && parameter->getModMatrix())
+        return sd.description.toString().startsWith ("modSrc");
+
+    return false;
+}
+
+void Knob::itemDragEnter (const SourceDetails&)
+{
+    dragOver = true;
+    repaint();
+}
+
+void Knob::itemDragExit (const SourceDetails&)
+{
+    dragOver = false;
+    repaint();
+}
+
+void Knob::itemDropped (const SourceDetails& sd)
+{
+    dragOver = false;
+    repaint();
+
+    auto& mm = *parameter->getModMatrix();
+
+    auto src = ModSrcId (sd.description.toString().getTrailingIntValue());
+    auto dst = ModDstId (parameter->getModIndex());
+
+    mm.setModDepth (src, dst, 1.0f);
 }

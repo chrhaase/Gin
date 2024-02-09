@@ -209,7 +209,7 @@ private:
             auto delta = opening ? 1.0f / 0.333f / 30.0f : - 1.0f / 0.333f / 30.0f;
             owner.pagesOpen[pageIdx] = juce::jlimit (0.0f, 1.0f, owner.pagesOpen[pageIdx] + delta);
 
-            if (owner.pagesOpen[pageIdx] == 0 || owner.pagesOpen[pageIdx] == 1)
+            if (juce::approximatelyEqual (owner.pagesOpen[pageIdx], 0.0f) || juce::approximatelyEqual (owner.pagesOpen[pageIdx], 1.0f))
                 stopTimer();
 
             owner.resized();
@@ -250,6 +250,8 @@ private:
         juce::Component controlsParent;
         juce::OwnedArray<juce::Component> controls, bottomButtons;
         bool opening = false;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PageComponent)
     };
 
     //==============================================================================

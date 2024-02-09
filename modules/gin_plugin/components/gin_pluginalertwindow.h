@@ -17,8 +17,21 @@ public:
     }
 
    #if JUCE_MODAL_LOOPS_PERMITTED
-    int runModalLoop (Component& parent)
+    int runModalLoop (juce::Component& parent)
     {
+        std::optional<juce::Rectangle<int>> originalSize;
+        
+        auto rc = getLocalBounds();
+        if (rc.getWidth() > parent.getWidth() || rc.getHeight() > parent.getHeight())
+        {
+            originalSize = parent.getBounds();
+
+            auto w = std::max (rc.getWidth()  + 50, getWidth());
+            auto h = std::max (rc.getHeight() + 50, getHeight());
+            
+            parent.setSize (w, h);
+        }
+        
         blur = std::make_unique<BlurryComp> (parent.createComponentSnapshot (parent.getLocalBounds()));
         blur->setAlwaysOnTop (true);
         blur->setBounds (parent.getLocalBounds());
@@ -32,6 +45,9 @@ public:
 
         blur->removeChildComponent (blur.get());
         blur = nullptr;
+        
+        if (originalSize.has_value())
+            parent.setSize (originalSize->getWidth(), originalSize->getHeight());
 
         setVisible (false);
 
@@ -39,8 +55,64 @@ public:
     }
    #endif
 
+    void runAsync (juce::Component& parent, std::function<void (int)> callback)
+    {
+        std::optional<juce::Rectangle<int>> originalSize;
+        
+        auto rc = getLocalBounds();
+        if (rc.getWidth() > parent.getWidth() || rc.getHeight() > parent.getHeight())
+        {
+            originalSize = parent.getBounds();
+
+            auto w = std::max (rc.getWidth()  + 50, getWidth());
+            auto h = std::max (rc.getHeight() + 50, getHeight());
+            
+            parent.setSize (w, h);
+        }
+        
+        blur = std::make_unique<BlurryComp> (parent.createComponentSnapshot (parent.getLocalBounds()));
+        blur->setAlwaysOnTop (true);
+        blur->setBounds (parent.getLocalBounds());
+        parent.addAndMakeVisible (*blur);
+
+        blur->addChildComponent (this);
+        setBounds (blur->getLocalBounds().withSizeKeepingCentre (getWidth(), getHeight()));
+
+        setDropShadowEnabled (false);
+
+        enterModalState (true, new Callback ([this, callback, originalSize, &parent] (int ret)
+        {
+            blur->removeChildComponent (blur.get());
+            blur = nullptr;
+
+            setVisible (false);
+            
+            if (originalSize.has_value())
+                parent.setSize (originalSize->getWidth(), originalSize->getHeight());
+
+            callback (ret);
+        }));
+    }
+
 private:
-    class BlurryComp : public Component
+    class Callback : public juce::ModalComponentManager::Callback
+    {
+    public:
+        Callback (std::function<void (int)> callback_)
+            : callback (callback_)
+        {
+
+        }
+
+        void modalStateFinished (int returnValue) override
+        {
+            callback (returnValue);
+        }
+
+        std::function<void (int)> callback;
+    };
+
+    class BlurryComp : public juce::Component
     {
     public:
         BlurryComp (juce::Image img) : background (img)

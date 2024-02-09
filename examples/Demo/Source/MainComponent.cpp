@@ -292,7 +292,7 @@ struct WebsocketDemo : public juce::Component
     juce::TextEditor outText;
     juce::TextButton sendButton {"Send"};
 
-    gin::AsyncWebsocket websocket {juce::URL ("wss://demos.kaazing.com/echo") };
+    gin::AsyncWebsocket websocket {juce::URL ("wss://ws.postman-echo.com/raw") };
 };
 
 //==============================================================================
@@ -494,7 +494,8 @@ struct ImageResizeDemo : public juce::Component,
         setName ("Image Resize");
 
         auto source = juce::ImageFileFormat::loadFrom (BinaryData::pencils_jpeg, BinaryData::pencils_jpegSize);
-        source = gin::applyResize (source, 0.97f);
+
+        source = gin::applyResize (source, 0.97f, gin::ResizeAlgorirm::avir);
 
         sourceARGB = source.convertedToFormat (juce::Image::ARGB);
         sourceRGB = source.convertedToFormat (juce::Image::RGB);
@@ -524,11 +525,27 @@ struct ImageResizeDemo : public juce::Component,
     {
         g.fillAll (juce::Colours::black);
 
-        auto zoomed = gin::applyResize (sourceARGB, (float) zoom.getValue());
+        auto t1 = juce::Time::getMillisecondCounterHiRes();
+        auto zoomed1 = gin::applyResize (sourceARGB, (float) zoom.getValue(), gin::ResizeAlgorirm::avir);
+        auto t2 = juce::Time::getMillisecondCounterHiRes();
+        auto zoomed2 = gin::applyResize (sourceARGB, (float) zoom.getValue(), gin::ResizeAlgorirm::lanczos);
+        auto t3 = juce::Time::getMillisecondCounterHiRes();
 
-        g.drawImageAt (zoomed,
-                       getWidth() / 2 - zoomed.getWidth() / 2,
-                       getHeight() / 2 - zoomed.getHeight() / 2);
+        printf ("ImageResizeDemo: AVIR:     %.1f ms\n", t2 - t1);
+        printf ("ImageResizeDemo: Lanczos:  %.1f ms\n", t3 - t2);
+        printf ("ImageResizeDemo: Ratio:    %.1f x\n", (t2 - t1) / (t3 - t2));
+
+        {
+            juce::Graphics::ScopedSaveState sss (g);
+            g.reduceClipRegion (getLocalBounds().removeFromLeft (getWidth() / 2 + 1));
+            g.drawImageAt (zoomed1, getWidth() / 2 - zoomed1.getWidth() / 2, getHeight() / 2 - zoomed1.getHeight() / 2);
+        }
+
+        {
+            juce::Graphics::ScopedSaveState sss (g);
+            g.reduceClipRegion (getLocalBounds().removeFromRight (getWidth() / 2 + 1));
+            g.drawImageAt (zoomed2, getWidth() / 2 - zoomed2.getWidth() / 2, getHeight() / 2 - zoomed2.getHeight() / 2);
+        }
     }
 
     juce::Image convertToBW (const juce::Image& src)
@@ -710,7 +727,7 @@ struct DownloadManagerDemo : public juce::Component,
             DBG("All done!");
         });
 
-        gin::asyncDownload (juce::URL ("http://rabien.com"), [] (const juce::String& t)
+        gin::asyncDownload (juce::URL ("https://rabien.com"), [] (const juce::String& t)
         {
             juce::ignoreUnused (t);
             DBG(t);
@@ -1542,8 +1559,310 @@ struct LagrangeDemo : public juce::Component
 };
 
 //==============================================================================
+struct EllipseDemo : public juce::Component
+{
+    EllipseDemo()
+    {
+        setName ("Ellipse");
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (points.size() >= 2)
+            points.clear();
+
+        points.add ({e.position.x, e.position.y});
+
+        repaint();
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto bnds = getLocalBounds().toFloat();
+
+        auto a = getWidth() / 2.0f;
+        auto b = getHeight() / 2.0f;
+
+        g.setColour (juce::Colours::green);
+        g.drawEllipse (bnds.getCentreX() - a / 2, bnds.getCentreY() - b / 2, a, b, 2.0f);
+
+        if (points.size() == 2)
+        {
+            g.drawLine (juce::Line<float> (points[0], points[1]), 2.0f);
+
+            gin::Ellipse<float> ellipse (0, 0, a, b);
+            auto hits = ellipse.findIntersections (points[0] - bnds.getCentre(), points[1] - bnds.getCentre());
+
+            g.setColour (juce::Colours::red);
+            for (auto h : hits)
+                g.fillEllipse (h.x - 3.0f + bnds.getCentreX(), h.y - 3.0f + bnds.getCentreY(), 6.0f, 6.0f);
+        }
+
+        g.setColour (juce::Colours::yellow);
+        for (auto pt : points)
+            g.fillEllipse (pt.getX() - 3.0f, pt.getY() - 3.0f, 6.0f, 6.0f);
+
+        if (points.isEmpty())
+            g.drawText ("Click twice to add a line, click again to start a new line", getLocalBounds(), juce::Justification::centred);
+    }
+
+    juce::Array<juce::Point<float>> points;
+};
+
+//==============================================================================
+struct CatenaryDemo : public juce::Component
+{
+    CatenaryDemo()
+    {
+        setName ("Catenary");
+    }
+
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (points.size() >= 2)
+            points.clear();
+
+        points.add ({e.position.x, e.position.y});
+
+        repaint();
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        g.setColour (juce::Colours::yellow);
+        for (auto pt : points)
+            g.fillEllipse (pt.getX() - 3.0f, pt.getY() - 3.0f, 6.0f, 6.0f);
+
+        if (points.size() == 2)
+        {
+            auto h = float (getHeight());
+            auto p1 = points[0];
+            auto p2 = points[1];
+
+            if (p1.x > p2.x)
+                std::swap (p1, p2);
+
+            gin::Catenary catenary (p1.x, h - p1.y, p2.x, h - p2.y, juce::Line<float> (p1, p2).getLength() * 0.2f);
+
+            juce::Path p;
+            p.startNewSubPath (p1.x, p1.y);
+
+            for (auto x = p1.x + 2.0f; x < p2.x - 2.0f; x += 2.0f)
+                p.lineTo (x, h - catenary.calcY (x));
+            p.lineTo (p2.x, p2.y);
+
+            g.strokePath (p, juce::PathStrokeType (1.5f));
+        }
+
+        if (points.isEmpty())
+            g.drawText ("Click twice to add a wire, click again to start a new wire", getLocalBounds(), juce::Justification::centred);
+    }
+
+    juce::Array<juce::Point<float>> points;
+};
+
+//==============================================================================
+struct WavetableDemo : public juce::Component
+{
+    WavetableDemo()
+    {
+        setName ("Wavetable");
+
+        juce::MemoryBlock mb (BinaryData::Analog_PWM_Saw_01_wav, BinaryData::Analog_PWM_Saw_01_wavSize);
+        juce::AudioSampleBuffer buffer;
+
+        if (int size = gin::getWavetableSize (mb); size > 0)
+        {
+            auto is = new juce::MemoryInputStream (mb.getData(), mb.getSize(), false);
+            auto reader = std::unique_ptr<juce::AudioFormatReader> (juce::WavAudioFormat().createReaderFor (is, true));
+
+            if (reader)
+            {
+                buffer.setSize (1, int (reader->lengthInSamples));
+                reader->read (&buffer, 0, int (reader->lengthInSamples), 0, true, false);
+
+                loadWavetables (bllt, reader->sampleRate, buffer, reader->sampleRate, size);
+
+                osc = std::make_unique<gin::WTOscillator> ();
+                osc->setWavetable (&bllt);
+            }
+        }
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        auto note = gin::getMidiNoteFromHertz (44.1f);
+
+        juce::AudioSampleBuffer buf (2, 1024);
+
+        auto rc = getLocalBounds().withTrimmedLeft (bllt.size()).withTrimmedBottom (bllt.size());
+
+        int step = 4;
+        for (int i = bllt.size(); i >= 0; i -= step)
+        {
+            gin::WTOscillator::Params params;
+            params.position = float (i) / bllt.size();
+
+            buf.clear();
+
+            osc->noteOn (0.0f);
+            osc->process (note, params, buf);
+
+            juce::Path p;
+            auto d = buf.getReadPointer (0);
+            for (auto x = 0; x < 1024; x++)
+            {
+                auto fx = x / 1024.0f * rc.getWidth() + rc.getX();
+                auto fy = -d[x] * rc.getHeight() / 2.0f + rc.getCentreY();
+
+                if (x == 0)
+                    p.startNewSubPath (fx, fy);
+                else
+                    p.lineTo (fx, fy);
+            }
+
+            g.setColour (juce::Colours::yellow.withAlpha (0.3f));
+            g.strokePath (p, juce::PathStrokeType (1.0f));
+
+            rc.setX (rc.getX() - step);
+            rc.setY (rc.getY() + step);
+        }
+    }
+
+    juce::OwnedArray<gin::BandLimitedLookupTable> bllt;
+    std::unique_ptr<gin::WTOscillator> osc;
+};
+
+//==============================================================================
+struct BLLTDemo : public juce::Component
+{
+    BLLTDemo()
+    {
+        setName ("BLLT");
+
+        juce::AudioSampleBuffer buf (1, 2048);
+
+        auto w = buf.getWritePointer (0);
+        for (auto i = 0; i < 2048; i++)
+            w[i] = tables.processSquare (0.0f, i / 2048.0f);
+
+        std::unique_ptr<juce::dsp::FFT> fft;
+        bllt.loadFromBuffer (fft, 44100, buf, 44100, 12);
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+
+        //
+        // From formula
+        //
+        {
+            auto area = getLocalBounds();
+            auto note = 0.5f;
+            for (int i = 0; i < int (bllt.tables.size()); i++)
+            {
+                auto rc = area.removeFromTop (getHeight() / bllt.tables.size()).reduced (3);
+
+                juce::Path p;
+
+                for (auto x = 0; x < 2048; x++)
+                {
+                    auto fx = x / 2048.0f * rc.getWidth() + rc.getX();
+                    auto fy = tables.processSquare (note, x / 2048.0f) * rc.getHeight() / 2.0f + rc.getCentreY();
+
+                    if (x == 0)
+                        p.startNewSubPath (fx, fy);
+                    else
+                        p.lineTo (fx, fy);
+                }
+
+                g.setColour (juce::Colours::green);
+                g.strokePath (p, juce::PathStrokeType (1.0f));
+
+                note += 12.0f;
+            }
+        }
+
+        //
+        // From wavefile
+        //
+        {
+            auto area = getLocalBounds();
+            for (int i = 0; i < int (bllt.tables.size()); i++)
+            {
+                auto rc = area.removeFromTop (getHeight() / bllt.tables.size()).reduced (3);
+
+                juce::Path p;
+
+                for (auto x = 0; x < 2048; x++)
+                {
+                    auto fx = x / 2048.0f * rc.getWidth() + rc.getX();
+                    auto fy = bllt.get (i, x / 2048.0f) * rc.getHeight() / 2.0f + rc.getCentreY();
+
+                    if (x == 0)
+                        p.startNewSubPath (fx, fy);
+                    else
+                        p.lineTo (fx, fy);
+                }
+                g.setColour (juce::Colours::yellow);
+                g.strokePath (p, juce::PathStrokeType (1.0f));
+            }
+        }
+    }
+
+    gin::BandLimitedLookupTables tables {44100, 12, 2048};
+    gin::BandLimitedLookupTable bllt;
+};
+
+//==============================================================================
+struct EquationParserDemo : public juce::Component
+{
+    EquationParserDemo()
+    {
+        setName ("Equation Parser");
+
+        parser.defineNameChars ("0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.");
+
+        equation.setText ("2 + 2", juce::dontSendNotification);
+        equation.onReturnKey = [this]
+        {
+            parser.setEquation (equation.getText());
+            auto res = parser.evaluate();
+
+            if (parser.hasError())
+                result.setText (parser.getError(), juce::dontSendNotification);
+            else
+                result.setText (juce::String (res), juce::dontSendNotification);
+        };
+        addAndMakeVisible (equation);
+
+        result.setReadOnly (true);
+        addAndMakeVisible (result);
+    }
+
+    void resized() override
+    {
+        auto rc = getLocalBounds().reduced (8);
+
+        equation.setBounds (rc.removeFromTop (25));
+        rc.removeFromTop (8);
+        result.setBounds (rc.removeFromTop (25));
+    }
+
+    gin::EquationParser parser;
+
+    juce::TextEditor equation;
+    juce::TextEditor result;
+};
+
+//==============================================================================
 MainContentComponent::MainContentComponent()
 {
+    demoComponents.add (new EquationParserDemo());
+    demoComponents.add (new BLLTDemo());
+    demoComponents.add (new WavetableDemo());
+    demoComponents.add (new CatenaryDemo());
+    demoComponents.add (new EllipseDemo());
     demoComponents.add (new PerlinNoiseDemo());
     demoComponents.add (new TextRenderDemo());
     demoComponents.add (new AsyncUpdateDemo());
@@ -1585,7 +1904,7 @@ MainContentComponent::MainContentComponent()
     addAndMakeVisible (demoList);
     addAndMakeVisible (toggleComponentViewer);
 
-    setSize (800, 640);
+    setSize (1000, 640);
 
     toggleComponentViewer.onClick = [this]
     {

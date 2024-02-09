@@ -18,11 +18,11 @@
   ID:                   gin_gui
   vendor:               Roland Rabien
   version:              1.0.0
-  name:                 Gin
-  description:          Gin
+  name:                 Gin GUI Components
+  description:          Gin GUI Components
   website:              www.rabiensoftware.com
   license:              BSD
-  minimumCppStandard:   17
+  minimumCppStandard:   20
 
   dependencies:         juce_core juce_graphics juce_events juce_gui_basics juce_gui_extra gin
   OSXFrameworks:        Security
@@ -73,11 +73,13 @@ namespace gin
 
 #include "images/gin_imageutilities.h"
 
+#include "components/gin_componentgrid.h"
 #include "components/gin_componentutils.h"
 #include "components/gin_componentviewer.h"
 #include "components/gin_ginlookandfeel.h"
 #include "components/gin_mapviewer.h"
 #include "components/gin_propertycomponents.h"
 #include "components/gin_singlelinetexteditor.h"
+#include "components/gin_svgbutton.h"
 
 }

@@ -18,6 +18,14 @@ public:
         unwatchParams();
     }
 
+    juce::Colour dimIfNeeded (const juce::Colour& c)
+    {
+        if (! isEnabled())
+            return c.withMultipliedAlpha (0.5f);
+
+        return c;
+    }
+
 protected:
     void showBubble (const juce::String& text, const juce::Rectangle<int>& rc)
     {
@@ -46,14 +54,27 @@ protected:
 
     void watchParam (Parameter* p)
     {
-        p->addListener (this);
-        params.add (p);
+        if (p != nullptr)
+        {
+            p->addListener (this);
+            params.add (p);
+        }
+    }
+
+    void unwatchParam (Parameter* p)
+    {
+        if (p != nullptr)
+        {
+            p->removeListener (this);
+            params.removeFirstMatchingValue (p);
+        }
     }
 
     void unwatchParams()
     {
         for (auto p : params)
             p->removeListener (this);
+        params.clear();
     }
 
     virtual void paramChanged ()                { repaint ();               }

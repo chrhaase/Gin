@@ -7,13 +7,16 @@ class LFOComponent : public MultiParamComponent,
                      private juce::Timer
 {
 public:
-    LFOComponent() = default;
+    LFOComponent();
     ~LFOComponent() override = default;
+    
+    void setUnclamped (bool b) { unclamped = b; }
 
-    void setBPM (float bpm);
     void setParams (Parameter::Ptr wave, Parameter::Ptr sync, Parameter::Ptr rate,
                     Parameter::Ptr beat, Parameter::Ptr depth, Parameter::Ptr offset,
                     Parameter::Ptr phase, Parameter::Ptr enable);
+    
+    std::function<std::vector<float>()> phaseCallback;
 
 private:
     void paint (juce::Graphics& g) override;
@@ -30,10 +33,11 @@ private:
     LFO lfo;
     juce::Path path;
     bool dirty = true;
-    float bpm = 120.0f, curPhase = 0;
-    double lastUpdate = -1;
+    std::vector<float> curPhases;
     std::map<int,float> curve;
 
 private:
+    bool unclamped = false;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LFOComponent)
 };

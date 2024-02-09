@@ -18,11 +18,11 @@
   ID:                   gin_graphics
   vendor:               Roland Rabien
   version:              1.0.0
-  name:                 Gin
-  description:          Gin
+  name:                 Gin Graphics Utilities
+  description:          Gin Graphics Utilities
   website:              www.rabiensoftware.com
   license:              BSD
-  minimumCppStandard:   17
+  minimumCppStandard:   20
 
   dependencies:         juce_core juce_graphics gin
   OSXFrameworks:        Security
@@ -66,6 +66,5 @@
 namespace gin
 {
 #include "formats/gin_bmpimageformat.h"
-
 #include "images/gin_imageeffects.h"
 }

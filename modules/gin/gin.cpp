@@ -54,6 +54,7 @@ namespace gin
 #include "utilities/gin_linearregression.cpp"
 #include "utilities/gin_messagepack.cpp"
 #include "utilities/gin_realtimeasyncupdater.cpp"
+#include "utilities/gin_riffparser.cpp"
 #include "utilities/gin_plist.cpp"
 #ifndef JUCE_ANDROID
  #include "utilities/gin_sharedmemory.cpp"
@@ -73,6 +74,7 @@ namespace gin
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wswitch-enum"
  #pragma clang diagnostic ignored "-Wmissing-noreturn"
+ #pragma clang diagnostic ignored "-Wfloat-equal"
 #endif
 
 JUCE_BEGIN_IGNORE_WARNINGS_MSVC(4702)

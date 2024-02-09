@@ -37,7 +37,7 @@ struct OscState : public FuncState
 
     inline void incPhase (float note)
     {
-        if (note != lastNote)
+        if (! juce::approximatelyEqual (note, lastNote))
         {
             lastNote = note;
 
@@ -61,6 +61,21 @@ struct OscState : public FuncState
     }
 
     float lastNote = -1.0f, frequency = -1.0f, delta = -1.0f;
+};
+
+//==============================================================================
+/** State for noise
+ */
+struct NoiseState : public FuncState
+{
+    NoiseState (double sr) : FuncState (sr) {}
+
+    double process()
+    {
+        return noise.nextSample();
+    }
+
+    WhiteNoise noise;
 };
 
 //==============================================================================

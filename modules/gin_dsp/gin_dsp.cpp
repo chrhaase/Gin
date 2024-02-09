@@ -28,20 +28,29 @@
 #define CPU_CLIPS_NEGATIVE 0
 #define CPU_CLIPS_POSITIVE 0
 
-#define ENABLE_SINC_BEST_CONVERTER		1
-#define ENABLE_SINC_MEDIUM_CONVERTER	1
-#define ENABLE_SINC_FAST_CONVERTER		1
+#define ENABLE_SINC_BEST_CONVERTER      1
+#define ENABLE_SINC_MEDIUM_CONVERTER    1
+#define ENABLE_SINC_FAST_CONVERTER      1
 
-extern "C"
+namespace gin
 {
-#include "3rdparty/src/samplerate.h"
-#if GIN_BUILD_LIB_SAMPLERATE
- #include "3rdparty/src/src_linear.c"
- #include "3rdparty/src/src_sinc.c"
- #include "3rdparty/src/src_zoh.c"
- #include "3rdparty/src/samplerate.c"
-#endif
+    namespace SRC
+    {
+        #include "3rdparty/SecretRabbitCode/samplerate.h"
+        #include "3rdparty/SecretRabbitCode/src_linear.c"
+        #include "3rdparty/SecretRabbitCode/src_sinc.c"
+        #include "3rdparty/SecretRabbitCode/src_zoh.c"
+        #include "3rdparty/SecretRabbitCode/samplerate.c"
+    }
 }
+
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
+
+#include "3rdparty/AudioFilter/src/ButterworthCreator.cpp"
+#include "3rdparty/AudioFilter/src/ParametricCreator.cpp"
+#include "3rdparty/AudioFilter/src/Response.cpp"
+
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 #if __clang__
  #pragma clang diagnostic pop
@@ -80,6 +89,7 @@ namespace gin
 #include "components/gin_levelmeter.cpp"
 #include "components/gin_triggeredscope.cpp"
 #include "components/gin_waveformcomponent.cpp"
+#include "components/gin_wavetablecomponent.cpp"
 #include "components/gin_xyscope.cpp"
 
 }

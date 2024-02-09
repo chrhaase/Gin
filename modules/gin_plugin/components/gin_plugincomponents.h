@@ -10,6 +10,7 @@ public:
     PluginButton (Parameter* parameter_)
       : parameter (parameter_)
     {
+        setName (parameter->getShortName());
         setButtonText (parameter->getUserValueText());
         setToggleState (parameter->getUserValue() > 0.0f, juce::dontSendNotification);
 
@@ -38,6 +39,7 @@ public:
 
     void parentHierarchyChanged() override
     {
+        juce::TextButton::parentHierarchyChanged();
         auto a = wantsAccessibleKeyboard (*this);
         setWantsKeyboardFocus (a);
     }
@@ -45,6 +47,54 @@ public:
     Parameter* parameter;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginButton)
+};
+
+//==============================================================================
+/** Button for toggling a parameter
+*/
+class SVGPluginButton : public SVGButton,
+                        private Parameter::ParameterListener
+{
+public:
+    SVGPluginButton (Parameter* parameter_, const juce::String& svg)
+      : SVGButton (parameter_->getShortName(), svg), parameter (parameter_)
+    {
+        setButtonText (parameter->getUserValueText());
+        setToggleState (parameter->getUserValue() > 0.0f, juce::dontSendNotification);
+
+        parameter->addListener (this);
+    }
+
+    ~SVGPluginButton() override
+    {
+        parameter->removeListener (this);
+    }
+
+    void valueUpdated (Parameter*) override
+    {
+        setToggleState (parameter->getUserValue() > 0.0f, juce::dontSendNotification);
+        setButtonText (parameter->getUserValueText());
+        repaint ();
+    }
+
+    void clicked() override
+    {
+        parameter->beginUserAction();
+        parameter->setUserValueNotifingHost (parameter->getUserValue() > 0.0f ? 0.0f : 1.0f);
+        parameter->endUserAction();
+        setButtonText (parameter->getUserValueText());
+    }
+
+    void parentHierarchyChanged() override
+    {
+        SVGButton::parentHierarchyChanged();
+        auto a = wantsAccessibleKeyboard (*this);
+        setWantsKeyboardFocus (a);
+    }
+
+    Parameter* parameter;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SVGPluginButton)
 };
 
 /** Button for toggling a parameter, drawn as a power button
@@ -76,6 +126,7 @@ private:
 
     void parentHierarchyChanged() override
     {
+        PluginButton::parentHierarchyChanged();
         auto a = wantsAccessibleKeyboard (*this);
         setWantsKeyboardFocus (a);
     }
@@ -120,6 +171,7 @@ public:
 
     void parentHierarchyChanged() override
     {
+        juce::ComboBox::parentHierarchyChanged();
         auto a = wantsAccessibleKeyboard (*this);
         setWantsKeyboardFocus (a);
     }
@@ -140,6 +192,8 @@ public:
     PluginSlider (Parameter* parameter_, SliderStyle style, TextEntryBoxPosition textBoxPosition)
       : Slider (style, textBoxPosition), parameter (parameter_)
     {
+        setName (parameter->getShortName());
+
         addListener (this);
         setRange (parameter->getUserRangeStart(), parameter->getUserRangeEnd());
         setValue (parameter->getUserValue(), juce::dontSendNotification);
@@ -195,6 +249,7 @@ public:
 
     void parentHierarchyChanged() override
     {
+        juce::Slider::parentHierarchyChanged();
         auto a = wantsAccessibleKeyboard (*this);
         setWantsKeyboardFocus (a);
     }
@@ -222,6 +277,7 @@ private:
 
     void parentHierarchyChanged() override
     {
+        juce::Label::parentHierarchyChanged();
         auto a = wantsAccessibleKeyboard (*this);
         setWantsKeyboardFocus (a);
     }
@@ -272,6 +328,7 @@ public:
     void resized() override;
     void parentHierarchyChanged() override
     {
+        ParamComponent::parentHierarchyChanged();
         auto a = wantsAccessibleKeyboard (*this);
         name.setWantsKeyboardFocus (a);
         value.setWantsKeyboardFocus (a);
@@ -297,6 +354,7 @@ private:
     void resized() override;
     void parentHierarchyChanged() override
     {
+        ParamComponent::parentHierarchyChanged();
         auto a = wantsAccessibleKeyboard (*this);
         name.setWantsKeyboardFocus (a);
         button.setWantsKeyboardFocus (a);
@@ -324,6 +382,7 @@ protected:
     void resized() override;
     void parentHierarchyChanged() override
     {
+        ParamComponent::parentHierarchyChanged();
         auto a = wantsAccessibleKeyboard (*this);
         name.setWantsKeyboardFocus (a);
         comboBox.setWantsKeyboardFocus (a);
@@ -348,6 +407,7 @@ public:
         : synthesiser (s)
     {
         startTimerHz (4);
+        addAndMakeVisible (panic);
     }
 
     void timerCallback() override
@@ -366,8 +426,8 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        g.setColour (juce::Colours::white);
-        g.setFont (12);
+        g.setColour (findColour (PluginLookAndFeel::grey60ColourId, true));
+        g.setFont (11);
 
         auto rc = getLocalBounds().reduced (2);
         int h = rc.getHeight();
@@ -376,12 +436,29 @@ public:
         g.drawText (juce::String (voices), rc.removeFromLeft (int (h * 1.5)), juce::Justification::centred);
 
         g.fillPath (cpuPath, cpuPath.getTransformToScaleToFit (rc.removeFromLeft (h).toFloat(), true));
-        g.drawText (juce::String (cpu), rc.removeFromLeft (int (h * 1.5)), juce::Justification::centred);
+        g.drawText (juce::String (cpu) +"%", rc.removeFromLeft (int (h * 1.5)), juce::Justification::centred);
+    }
+    
+    void resized() override
+    {
+        auto rc = getLocalBounds().reduced (2);
+        int h = rc.getHeight();
+        
+        rc.removeFromLeft (int (h));
+        rc.removeFromLeft (int (h * 1.5));
+        rc.removeFromLeft (int (h));
+        rc.removeFromLeft (int (h * 1.5));
+        
+        panic.setBounds (rc.removeFromLeft (int (h * 1.5)));
     }
 
     Synthesiser& synthesiser;
     int voices = 0, cpu = 0;
 
-    juce::Path voicePath { parseSVGPath ("M12.41 148.02l232.94 105.67c6.8 3.09 14.49 3.09 21.29 0l232.94-105.67c16.55-7.51 16.55-32.52 0-40.03L266.65 2.31a25.607 25.607 0 0 0-21.29 0L12.41 107.98c-16.55 7.51-16.55 32.53 0 40.04zm487.18 88.28l-58.09-26.33-161.64 73.27c-7.56 3.43-15.59 5.17-23.86 5.17s-16.29-1.74-23.86-5.17L70.51 209.97l-58.1 26.33c-16.55 7.5-16.55 32.5 0 40l232.94 105.59c6.8 3.08 14.49 3.08 21.29 0L499.59 276.3c16.55-7.5 16.55-32.5 0-40zm0 127.8l-57.87-26.23-161.86 73.37c-7.56 3.43-15.59 5.17-23.86 5.17s-16.29-1.74-23.86-5.17L70.29 337.87 12.41 364.1c-16.55 7.5-16.55 32.5 0 40l232.94 105.59c6.8 3.08 14.49 3.08 21.29 0L499.59 404.1c16.55-7.5 16.55-32.5 0-40z") };
-    juce::Path cpuPath { parseSVGPath ("M416 48v416c0 26.51-21.49 48-48 48H144c-26.51 0-48-21.49-48-48V48c0-26.51 21.49-48 48-48h224c26.51 0 48 21.49 48 48zm96 58v12a6 6 0 0 1-6 6h-18v6a6 6 0 0 1-6 6h-42V88h42a6 6 0 0 1 6 6v6h18a6 6 0 0 1 6 6zm0 96v12a6 6 0 0 1-6 6h-18v6a6 6 0 0 1-6 6h-42v-48h42a6 6 0 0 1 6 6v6h18a6 6 0 0 1 6 6zm0 96v12a6 6 0 0 1-6 6h-18v6a6 6 0 0 1-6 6h-42v-48h42a6 6 0 0 1 6 6v6h18a6 6 0 0 1 6 6zm0 96v12a6 6 0 0 1-6 6h-18v6a6 6 0 0 1-6 6h-42v-48h42a6 6 0 0 1 6 6v6h18a6 6 0 0 1 6 6zM30 376h42v48H30a6 6 0 0 1-6-6v-6H6a6 6 0 0 1-6-6v-12a6 6 0 0 1 6-6h18v-6a6 6 0 0 1 6-6zm0-96h42v48H30a6 6 0 0 1-6-6v-6H6a6 6 0 0 1-6-6v-12a6 6 0 0 1 6-6h18v-6a6 6 0 0 1 6-6zm0-96h42v48H30a6 6 0 0 1-6-6v-6H6a6 6 0 0 1-6-6v-12a6 6 0 0 1 6-6h18v-6a6 6 0 0 1 6-6zm0-96h42v48H30a6 6 0 0 1-6-6v-6H6a6 6 0 0 1-6-6v-12a6 6 0 0 1 6-6h18v-6a6 6 0 0 1 6-6z") };
+    juce::Path voicePath { parseSVGPath (gin::Assets::voice) };
+    juce::Path cpuPath { parseSVGPath (gin::Assets::cpu) };
+    
+    SVGButton panic { "panic", gin::Assets::panic };
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SynthesiserUsage)
 };

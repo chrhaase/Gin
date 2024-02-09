@@ -18,11 +18,11 @@
   ID:                   gin
   vendor:               Roland Rabien
   version:              1.0.0
-  name:                 Gin
-  description:          Gin
+  name:                 Gin General Utilities
+  description:          Gin General Utilities
   website:              www.rabiensoftware.com
   license:              BSD
-  minimumCppStandard:   17
+  minimumCppStandard:   20
 
   dependencies:         juce_core juce_data_structures
   OSXFrameworks:        Security
@@ -61,8 +61,10 @@
  #include <juce_graphics/juce_graphics.h>
 #endif
 
+#include <algorithm>
 #include <map>
 #include <cmath>
+
 
 namespace gin
 {
@@ -80,6 +82,7 @@ namespace gin
 #include "utilities/gin_messagepack.h"
 #include "utilities/gin_plist.h"
 #include "utilities/gin_realtimeasyncupdater.h"
+#include "utilities/gin_riffparser.h"
 #ifndef JUCE_ANDROID
  #include "utilities/gin_sharedmemory.h"
 #endif
@@ -89,6 +92,7 @@ namespace gin
 #include "utilities/gin_valuetreeobject.h"
 #include "utilities/gin_valuetreeutilities.h"
 
+#include "geometry/gin_catenary.h"
 #include "geometry/gin_geometry.h"
 
 }
