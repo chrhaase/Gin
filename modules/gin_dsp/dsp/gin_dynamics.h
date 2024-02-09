@@ -83,7 +83,7 @@ public:
     float calcCurve (float detectorValue);
 
 private:
-    juce::OwnedArray<EnvelopeDetector> envelopes;
+    juce::dsp::BallisticsFilter<float> envelope;
     LevelTracker inputTracker, outputTracker, reductionTracker {-30.0f};
 
     double sampleRate = 44100.0;

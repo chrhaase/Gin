@@ -52,6 +52,10 @@
  #endif
 #endif
 
+#ifndef GIN_BUILD_LIB_SAMPLERATE
+#define GIN_BUILD_LIB_SAMPLERATE 0
+#endif
+
 //==============================================================================
 #if defined (__clang__)
  #pragma clang diagnostic push

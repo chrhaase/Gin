@@ -27,8 +27,8 @@ public:
     void clearClip()        { clip = false; }
 
 protected:
-    float peakTime  = 0.0f;
-    float peakLevel = -100.0f;
-    float decayRate = 0.0f;
-    bool clip       = false;
+    std::atomic<float> peakTime  = 0.0f;
+    std::atomic<float> peakLevel = -100.0f;
+    std::atomic<float> decayRate = 0.0f;
+    std::atomic<bool> clip       = false;
 };

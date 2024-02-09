@@ -9,6 +9,7 @@ For more information visit www.rabiensoftware.com
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wswitch-enum"
  #pragma clang diagnostic ignored "-Wnested-anon-types"
+ #pragma clang diagnostic ignored "-Wdeprecated-copy-dtor"
 #endif
 
 #include "../3rdparty/muParser/muParser.h"
